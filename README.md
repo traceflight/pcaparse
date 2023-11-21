@@ -6,7 +6,7 @@ Provides parsers, readers and writers for Pcap and PcapNg data.
 
 [![Crates.io](https://img.shields.io/crates/v/pcaparse.svg)](https://crates.io/crates/pcaparse)
 [![rustdoc](https://img.shields.io/badge/Doc-pcaparse-green.svg)](https://docs.rs/pcaparse/)
-[![Crates.io](https://img.shields.io/crates/l/pcaparse.svg)](https://github.com/traceflight/pcaparse/blob/master/LICENSE)
+[![Crates.io](https://img.shields.io/crates/l/pcaparse.svg)](https://github.com/traceflight/pcaparse/blob/main/LICENSE)
 
 ## 
 
