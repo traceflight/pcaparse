@@ -1,29 +1,37 @@
 //! Interface Statistics Block.
 
 use std::borrow::Cow;
-use std::io::{Result as IoResult, Write};
+use std::io::Result as IoResult;
+use std::io::Write;
 
-use byteorder_slice::byteorder::WriteBytesExt;
-use byteorder_slice::result::ReadSlice;
-use byteorder_slice::ByteOrder;
+use byteorder::{ReadBytesExt, WriteBytesExt};
 use derive_into_owned::IntoOwned;
 
+use byteorder::ByteOrder;
+#[cfg(feature = "tokio")]
+use tokio::io::AsyncWrite;
+#[cfg(feature = "tokio")]
+use tokio_byteorder::{AsyncReadBytesExt, AsyncWriteBytesExt};
+
+#[cfg(feature = "tokio")]
+use super::block_common::AsyncPcapNgBlock;
 use super::block_common::{Block, PcapNgBlock};
+#[cfg(feature = "tokio")]
+use super::opt_common::{AsyncPcapNgOption, AsyncWriteOptTo};
 use super::opt_common::{CustomBinaryOption, CustomUtf8Option, PcapNgOption, UnknownOption, WriteOptTo};
 use crate::errors::PcapError;
-
 
 /// The Interface Statistics Block contains the capture statistics for a given interface and it is optional.
 #[derive(Clone, Debug, IntoOwned, Eq, PartialEq)]
 pub struct InterfaceStatisticsBlock<'a> {
     /// Specifies the interface these statistics refers to.
-    /// 
+    ///
     /// The correct interface will be the one whose Interface Description Block (within the current Section of the file)
     /// is identified by same number of this field.
     pub interface_id: u32,
 
     /// Time this statistics refers to.
-    /// 
+    ///
     /// The format of the timestamp is the same already defined in the Enhanced Packet Block.
     /// The length of a unit of time is specified by the 'if_tsresol' option of the Interface Description Block referenced by this packet.
     pub timestamp: u64,
@@ -38,8 +46,8 @@ impl<'a> PcapNgBlock<'a> for InterfaceStatisticsBlock<'a> {
             return Err(PcapError::InvalidField("InterfaceStatisticsBlock: block length < 12"));
         }
 
-        let interface_id = slice.read_u32::<B>().unwrap();
-        let timestamp = slice.read_u64::<B>().unwrap();
+        let interface_id = ReadBytesExt::read_u32::<B>(&mut slice).unwrap();
+        let timestamp = ReadBytesExt::read_u64::<B>(&mut slice).unwrap();
         let (slice, options) = InterfaceStatisticsOption::opts_from_slice::<B>(slice)?;
 
         let block = InterfaceStatisticsBlock { interface_id, timestamp, options };
@@ -60,6 +68,31 @@ impl<'a> PcapNgBlock<'a> for InterfaceStatisticsBlock<'a> {
     }
 }
 
+#[cfg(feature = "tokio")]
+#[async_trait::async_trait]
+impl<'a> AsyncPcapNgBlock<'a> for InterfaceStatisticsBlock<'a> {
+    async fn async_from_slice<B: ByteOrder + Send>(mut slice: &'a [u8]) -> Result<(&[u8], Self), PcapError> {
+        if slice.len() < 12 {
+            return Err(PcapError::InvalidField("InterfaceStatisticsBlock: block length < 12"));
+        }
+
+        let interface_id = AsyncReadBytesExt::read_u32::<B>(&mut slice).await.unwrap();
+        let timestamp = AsyncReadBytesExt::read_u64::<B>(&mut slice).await.unwrap();
+        let (slice, options) = InterfaceStatisticsOption::async_opts_from_slice::<B>(slice).await?;
+
+        let block = InterfaceStatisticsBlock { interface_id, timestamp, options };
+
+        Ok((slice, block))
+    }
+
+    async fn async_write_to<B: ByteOrder, W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> IoResult<usize> {
+        writer.write_u32::<B>(self.interface_id).await?;
+        writer.write_u64::<B>(self.timestamp).await?;
+
+        let opt_len = InterfaceStatisticsOption::async_write_opts_to::<B, _>(&self.options, writer).await?;
+        Ok(12 + opt_len)
+    }
+}
 
 /// The Interface Statistics Block options
 #[derive(Clone, Debug, IntoOwned, Eq, PartialEq)]
@@ -108,13 +141,15 @@ impl<'a> PcapNgOption<'a> for InterfaceStatisticsOption<'a> {
     fn from_slice<B: ByteOrder>(code: u16, length: u16, mut slice: &'a [u8]) -> Result<Self, PcapError> {
         let opt = match code {
             1 => InterfaceStatisticsOption::Comment(Cow::Borrowed(std::str::from_utf8(slice)?)),
-            2 => InterfaceStatisticsOption::IsbStartTime(slice.read_u64::<B>().map_err(|_| PcapError::IncompleteBuffer)?),
-            3 => InterfaceStatisticsOption::IsbEndTime(slice.read_u64::<B>().map_err(|_| PcapError::IncompleteBuffer)?),
-            4 => InterfaceStatisticsOption::IsbIfRecv(slice.read_u64::<B>().map_err(|_| PcapError::IncompleteBuffer)?),
-            5 => InterfaceStatisticsOption::IsbIfDrop(slice.read_u64::<B>().map_err(|_| PcapError::IncompleteBuffer)?),
-            6 => InterfaceStatisticsOption::IsbFilterAccept(slice.read_u64::<B>().map_err(|_| PcapError::IncompleteBuffer)?),
-            7 => InterfaceStatisticsOption::IsbOsDrop(slice.read_u64::<B>().map_err(|_| PcapError::IncompleteBuffer)?),
-            8 => InterfaceStatisticsOption::IsbUsrDeliv(slice.read_u64::<B>().map_err(|_| PcapError::IncompleteBuffer)?),
+            2 => InterfaceStatisticsOption::IsbStartTime(ReadBytesExt::read_u64::<B>(&mut slice).map_err(|_| PcapError::IncompleteBuffer)?),
+            3 => InterfaceStatisticsOption::IsbEndTime(ReadBytesExt::read_u64::<B>(&mut slice).map_err(|_| PcapError::IncompleteBuffer)?),
+            4 => InterfaceStatisticsOption::IsbIfRecv(ReadBytesExt::read_u64::<B>(&mut slice).map_err(|_| PcapError::IncompleteBuffer)?),
+            5 => InterfaceStatisticsOption::IsbIfDrop(ReadBytesExt::read_u64::<B>(&mut slice).map_err(|_| PcapError::IncompleteBuffer)?),
+            6 => InterfaceStatisticsOption::IsbFilterAccept(
+                ReadBytesExt::read_u64::<B>(&mut slice).map_err(|_| PcapError::IncompleteBuffer)?,
+            ),
+            7 => InterfaceStatisticsOption::IsbOsDrop(ReadBytesExt::read_u64::<B>(&mut slice).map_err(|_| PcapError::IncompleteBuffer)?),
+            8 => InterfaceStatisticsOption::IsbUsrDeliv(ReadBytesExt::read_u64::<B>(&mut slice).map_err(|_| PcapError::IncompleteBuffer)?),
 
             2988 | 19372 => InterfaceStatisticsOption::CustomUtf8(CustomUtf8Option::from_slice::<B>(code, slice)?),
             2989 | 19373 => InterfaceStatisticsOption::CustomBinary(CustomBinaryOption::from_slice::<B>(code, slice)?),
@@ -138,6 +173,60 @@ impl<'a> PcapNgOption<'a> for InterfaceStatisticsOption<'a> {
             InterfaceStatisticsOption::CustomBinary(a) => a.write_opt_to::<B, W>(a.code, writer),
             InterfaceStatisticsOption::CustomUtf8(a) => a.write_opt_to::<B, W>(a.code, writer),
             InterfaceStatisticsOption::Unknown(a) => a.write_opt_to::<B, W>(a.code, writer),
+        }
+    }
+}
+
+#[cfg(feature = "tokio")]
+#[async_trait::async_trait]
+impl<'a> AsyncPcapNgOption<'a> for InterfaceStatisticsOption<'a> {
+    async fn async_from_slice<B: ByteOrder + Send>(code: u16, length: u16, mut slice: &'a [u8]) -> Result<Self, PcapError> {
+        let opt = match code {
+            1 => InterfaceStatisticsOption::Comment(Cow::Borrowed(std::str::from_utf8(slice)?)),
+            2 => InterfaceStatisticsOption::IsbStartTime(
+                AsyncReadBytesExt::read_u64::<B>(&mut slice).await.map_err(|_| PcapError::IncompleteBuffer)?,
+            ),
+            3 => InterfaceStatisticsOption::IsbEndTime(
+                AsyncReadBytesExt::read_u64::<B>(&mut slice).await.map_err(|_| PcapError::IncompleteBuffer)?,
+            ),
+            4 => InterfaceStatisticsOption::IsbIfRecv(
+                AsyncReadBytesExt::read_u64::<B>(&mut slice).await.map_err(|_| PcapError::IncompleteBuffer)?,
+            ),
+            5 => InterfaceStatisticsOption::IsbIfDrop(
+                AsyncReadBytesExt::read_u64::<B>(&mut slice).await.map_err(|_| PcapError::IncompleteBuffer)?,
+            ),
+            6 => InterfaceStatisticsOption::IsbFilterAccept(
+                AsyncReadBytesExt::read_u64::<B>(&mut slice).await.map_err(|_| PcapError::IncompleteBuffer)?,
+            ),
+            7 => InterfaceStatisticsOption::IsbOsDrop(
+                AsyncReadBytesExt::read_u64::<B>(&mut slice).await.map_err(|_| PcapError::IncompleteBuffer)?,
+            ),
+            8 => InterfaceStatisticsOption::IsbUsrDeliv(
+                AsyncReadBytesExt::read_u64::<B>(&mut slice).await.map_err(|_| PcapError::IncompleteBuffer)?,
+            ),
+
+            2988 | 19372 => InterfaceStatisticsOption::CustomUtf8(CustomUtf8Option::async_from_slice::<B>(code, slice).await?),
+            2989 | 19373 => InterfaceStatisticsOption::CustomBinary(CustomBinaryOption::async_from_slice::<B>(code, slice).await?),
+
+            _ => InterfaceStatisticsOption::Unknown(UnknownOption::new(code, length, slice)),
+        };
+
+        Ok(opt)
+    }
+
+    async fn async_write_to<B: ByteOrder, W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> IoResult<usize> {
+        match self {
+            InterfaceStatisticsOption::Comment(a) => a.async_write_opt_to::<B, W>(1, writer).await,
+            InterfaceStatisticsOption::IsbStartTime(a) => a.async_write_opt_to::<B, W>(2, writer).await,
+            InterfaceStatisticsOption::IsbEndTime(a) => a.async_write_opt_to::<B, W>(3, writer).await,
+            InterfaceStatisticsOption::IsbIfRecv(a) => a.async_write_opt_to::<B, W>(4, writer).await,
+            InterfaceStatisticsOption::IsbIfDrop(a) => a.async_write_opt_to::<B, W>(5, writer).await,
+            InterfaceStatisticsOption::IsbFilterAccept(a) => a.async_write_opt_to::<B, W>(6, writer).await,
+            InterfaceStatisticsOption::IsbOsDrop(a) => a.async_write_opt_to::<B, W>(7, writer).await,
+            InterfaceStatisticsOption::IsbUsrDeliv(a) => a.async_write_opt_to::<B, W>(8, writer).await,
+            InterfaceStatisticsOption::CustomBinary(a) => a.async_write_opt_to::<B, W>(a.code, writer).await,
+            InterfaceStatisticsOption::CustomUtf8(a) => a.async_write_opt_to::<B, W>(a.code, writer).await,
+            InterfaceStatisticsOption::Unknown(a) => a.async_write_opt_to::<B, W>(a.code, writer).await,
         }
     }
 }

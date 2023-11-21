@@ -1,14 +1,23 @@
 //! Packet Block.
 
 use std::borrow::Cow;
-use std::io::{Result as IoResult, Write};
+use std::io::Result as IoResult;
+use std::io::Write;
 
-use byteorder_slice::byteorder::WriteBytesExt;
-use byteorder_slice::result::ReadSlice;
-use byteorder_slice::ByteOrder;
+use byteorder::{ReadBytesExt, WriteBytesExt};
 use derive_into_owned::IntoOwned;
 
+use byteorder::ByteOrder;
+#[cfg(feature = "tokio")]
+use tokio::io::AsyncWrite;
+#[cfg(feature = "tokio")]
+use tokio_byteorder::{AsyncReadBytesExt, AsyncWriteBytesExt};
+
+#[cfg(feature = "tokio")]
+use super::block_common::AsyncPcapNgBlock;
 use super::block_common::{Block, PcapNgBlock};
+#[cfg(feature = "tokio")]
+use super::opt_common::{AsyncPcapNgOption, AsyncWriteOptTo};
 use super::opt_common::{CustomBinaryOption, CustomUtf8Option, PcapNgOption, UnknownOption, WriteOptTo};
 use crate::errors::PcapError;
 
@@ -20,7 +29,7 @@ pub struct PacketBlock<'a> {
     pub interface_id: u16,
 
     /// Local drop counter.
-    /// 
+    ///
     /// It specifies the number of packets lost (by the interface and the operating system)
     /// between this packet and the preceding one.
     pub drop_count: u16,
@@ -48,11 +57,11 @@ impl<'a> PcapNgBlock<'a> for PacketBlock<'a> {
             return Err(PcapError::InvalidField("EnhancedPacketBlock: block length length < 20"));
         }
 
-        let interface_id = slice.read_u16::<B>().unwrap();
-        let drop_count = slice.read_u16::<B>().unwrap();
-        let timestamp = slice.read_u64::<B>().unwrap();
-        let captured_len = slice.read_u32::<B>().unwrap();
-        let original_len = slice.read_u32::<B>().unwrap();
+        let interface_id = ReadBytesExt::read_u16::<B>(&mut slice).unwrap();
+        let drop_count = ReadBytesExt::read_u16::<B>(&mut slice).unwrap();
+        let timestamp = ReadBytesExt::read_u64::<B>(&mut slice).unwrap();
+        let captured_len = ReadBytesExt::read_u32::<B>(&mut slice).unwrap();
+        let original_len = ReadBytesExt::read_u32::<B>(&mut slice).unwrap();
 
         let pad_len = (4 - (captured_len as usize % 4)) % 4;
         let tot_len = captured_len as usize + pad_len;
@@ -99,6 +108,61 @@ impl<'a> PcapNgBlock<'a> for PacketBlock<'a> {
     }
 }
 
+#[cfg(feature = "tokio")]
+#[async_trait::async_trait]
+impl<'a> AsyncPcapNgBlock<'a> for PacketBlock<'a> {
+    async fn async_from_slice<B: ByteOrder + Send>(mut slice: &'a [u8]) -> Result<(&'a [u8], PacketBlock<'a>), PcapError> {
+        if slice.len() < 20 {
+            return Err(PcapError::InvalidField("EnhancedPacketBlock: block length length < 20"));
+        }
+
+        let interface_id = AsyncReadBytesExt::read_u16::<B>(&mut slice).await.unwrap();
+        let drop_count = AsyncReadBytesExt::read_u16::<B>(&mut slice).await.unwrap();
+        let timestamp = AsyncReadBytesExt::read_u64::<B>(&mut slice).await.unwrap();
+        let captured_len = AsyncReadBytesExt::read_u32::<B>(&mut slice).await.unwrap();
+        let original_len = AsyncReadBytesExt::read_u32::<B>(&mut slice).await.unwrap();
+
+        let pad_len = (4 - (captured_len as usize % 4)) % 4;
+        let tot_len = captured_len as usize + pad_len;
+
+        if slice.len() < tot_len {
+            return Err(PcapError::InvalidField("EnhancedPacketBlock: captured_len + padding > block length"));
+        }
+
+        let data = &slice[..captured_len as usize];
+        slice = &slice[tot_len..];
+
+        let (slice, options) = PacketOption::async_opts_from_slice::<B>(slice).await?;
+        let block = PacketBlock {
+            interface_id,
+            drop_count,
+            timestamp,
+            captured_len,
+            original_len,
+            data: Cow::Borrowed(data),
+            options,
+        };
+
+        Ok((slice, block))
+    }
+
+    async fn async_write_to<B: ByteOrder, W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> IoResult<usize> {
+        writer.write_u16::<B>(self.interface_id).await?;
+        writer.write_u16::<B>(self.drop_count).await?;
+        writer.write_u64::<B>(self.timestamp).await?;
+        writer.write_u32::<B>(self.captured_len).await?;
+        writer.write_u32::<B>(self.original_len).await?;
+        tokio::io::AsyncWriteExt::write_all(writer, &self.data).await?;
+
+        let pad_len = (4 - (self.captured_len as usize % 4)) % 4;
+        tokio::io::AsyncWriteExt::write_all(writer, &[0_u8; 3][..pad_len]).await?;
+
+        let opt_len = PacketOption::async_write_opts_to::<B, _>(&self.options, writer).await?;
+
+        Ok(20 + self.data.len() + pad_len + opt_len)
+    }
+}
+
 /// Packet Block option
 #[derive(Clone, Debug, IntoOwned, Eq, PartialEq)]
 pub enum PacketOption<'a> {
@@ -129,7 +193,7 @@ impl<'a> PcapNgOption<'a> for PacketOption<'a> {
                 if slice.len() != 4 {
                     return Err(PcapError::InvalidField("PacketOption: Flags length != 4"));
                 }
-                PacketOption::Flags(slice.read_u32::<B>().map_err(|_| PcapError::IncompleteBuffer)?)
+                PacketOption::Flags(ReadBytesExt::read_u32::<B>(&mut slice).map_err(|_| PcapError::IncompleteBuffer)?)
             },
             3 => PacketOption::Hash(Cow::Borrowed(slice)),
 
@@ -150,6 +214,41 @@ impl<'a> PcapNgOption<'a> for PacketOption<'a> {
             PacketOption::CustomBinary(a) => a.write_opt_to::<B, W>(a.code, writer),
             PacketOption::CustomUtf8(a) => a.write_opt_to::<B, W>(a.code, writer),
             PacketOption::Unknown(a) => a.write_opt_to::<B, W>(a.code, writer),
+        }
+    }
+}
+
+#[cfg(feature = "tokio")]
+#[async_trait::async_trait]
+impl<'a> AsyncPcapNgOption<'a> for PacketOption<'a> {
+    async fn async_from_slice<B: ByteOrder + Send>(code: u16, length: u16, mut slice: &'a [u8]) -> Result<PacketOption<'a>, PcapError> {
+        let opt = match code {
+            1 => PacketOption::Comment(Cow::Borrowed(std::str::from_utf8(slice)?)),
+            2 => {
+                if slice.len() != 4 {
+                    return Err(PcapError::InvalidField("PacketOption: Flags length != 4"));
+                }
+                PacketOption::Flags(AsyncReadBytesExt::read_u32::<B>(&mut slice).await.map_err(|_| PcapError::IncompleteBuffer)?)
+            },
+            3 => PacketOption::Hash(Cow::Borrowed(slice)),
+
+            2988 | 19372 => PacketOption::CustomUtf8(CustomUtf8Option::async_from_slice::<B>(code, slice).await?),
+            2989 | 19373 => PacketOption::CustomBinary(CustomBinaryOption::async_from_slice::<B>(code, slice).await?),
+
+            _ => PacketOption::Unknown(UnknownOption::new(code, length, slice)),
+        };
+
+        Ok(opt)
+    }
+
+    async fn async_write_to<B: ByteOrder, W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> IoResult<usize> {
+        match self {
+            PacketOption::Comment(a) => a.async_write_opt_to::<B, W>(1, writer).await,
+            PacketOption::Flags(a) => a.async_write_opt_to::<B, W>(2, writer).await,
+            PacketOption::Hash(a) => a.async_write_opt_to::<B, W>(3, writer).await,
+            PacketOption::CustomBinary(a) => a.async_write_opt_to::<B, W>(a.code, writer).await,
+            PacketOption::CustomUtf8(a) => a.async_write_opt_to::<B, W>(a.code, writer).await,
+            PacketOption::Unknown(a) => a.async_write_opt_to::<B, W>(a.code, writer).await,
         }
     }
 }

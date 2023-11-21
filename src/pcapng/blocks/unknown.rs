@@ -1,14 +1,18 @@
 //! Unknown Block.
 
 use std::borrow::Cow;
-use std::io::{Result as IoResult, Write};
+use std::io::Result as IoResult;
+use std::io::Write;
 
-use byteorder_slice::ByteOrder;
+use byteorder::ByteOrder;
 use derive_into_owned::IntoOwned;
+#[cfg(feature = "tokio")]
+use tokio::io::AsyncWrite;
 
+#[cfg(feature = "tokio")]
+use super::block_common::AsyncPcapNgBlock;
 use super::block_common::{Block, PcapNgBlock};
 use crate::PcapError;
-
 
 /// Unknown block
 #[derive(Clone, Debug, IntoOwned, Eq, PartialEq)]
@@ -43,5 +47,21 @@ impl<'a> PcapNgBlock<'a> for UnknownBlock<'a> {
 
     fn into_block(self) -> Block<'a> {
         Block::Unknown(self)
+    }
+}
+
+#[cfg(feature = "tokio")]
+#[async_trait::async_trait]
+impl<'a> AsyncPcapNgBlock<'a> for UnknownBlock<'a> {
+    async fn async_from_slice<B: ByteOrder>(_slice: &'a [u8]) -> Result<(&[u8], UnknownBlock<'a>), PcapError>
+    where
+        Self: Sized,
+    {
+        unimplemented!("UnkknownBlock::<as PcapNgBlock>::From_slice shouldn't be called")
+    }
+
+    async fn async_write_to<B: ByteOrder, W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> IoResult<usize> {
+        tokio::io::AsyncWriteExt::write_all(writer, &self.value).await?;
+        Ok(self.value.len())
     }
 }

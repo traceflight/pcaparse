@@ -1,4 +1,4 @@
-use byteorder_slice::{BigEndian, ByteOrder, LittleEndian};
+use byteorder::{BigEndian, ByteOrder, LittleEndian};
 
 /// Timestamp resolution of the pcap
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -39,8 +39,7 @@ impl Endianness {
     pub fn from_byteorder<B: ByteOrder>() -> Self {
         if B::read_u32(&[0, 0, 0, 1]) == 1 {
             Endianness::Big
-        }
-        else {
+        } else {
             Endianness::Little
         }
     }
@@ -70,7 +69,6 @@ impl RuntimeByteorder for LittleEndian {
         Endianness::Little
     }
 }
-
 
 /// Data link type
 ///

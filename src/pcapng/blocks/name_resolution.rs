@@ -1,17 +1,25 @@
 //! Name Resolution Block (NRB).
 
 use std::borrow::Cow;
-use std::io::{Result as IoResult, Write};
+use std::io::Result as IoResult;
+use std::io::Write;
 
-use byteorder_slice::byteorder::WriteBytesExt;
-use byteorder_slice::result::ReadSlice;
-use byteorder_slice::ByteOrder;
+use byteorder::{ReadBytesExt, WriteBytesExt};
 use derive_into_owned::IntoOwned;
 
+use byteorder::ByteOrder;
+#[cfg(feature = "tokio")]
+use tokio::io::AsyncWrite;
+#[cfg(feature = "tokio")]
+use tokio_byteorder::{AsyncReadBytesExt, AsyncWriteBytesExt};
+
+#[cfg(feature = "tokio")]
+use super::block_common::AsyncPcapNgBlock;
 use super::block_common::{Block, PcapNgBlock};
+#[cfg(feature = "tokio")]
+use super::opt_common::{AsyncPcapNgOption, AsyncWriteOptTo};
 use super::opt_common::{CustomBinaryOption, CustomUtf8Option, PcapNgOption, UnknownOption, WriteOptTo};
 use crate::errors::PcapError;
-
 
 /// The Name Resolution Block (NRB) is used to support the correlation of numeric addresses
 /// (present in the captured packets) and their corresponding canonical names and it is optional.
@@ -62,6 +70,43 @@ impl<'a> PcapNgBlock<'a> for NameResolutionBlock<'a> {
     }
 }
 
+#[cfg(feature = "tokio")]
+#[async_trait::async_trait]
+impl<'a> AsyncPcapNgBlock<'a> for NameResolutionBlock<'a> {
+    async fn async_from_slice<B: ByteOrder + Send>(mut slice: &'a [u8]) -> Result<(&'a [u8], Self), PcapError> {
+        let mut records = Vec::new();
+
+        loop {
+            let (slice_tmp, record) = Record::async_from_slice::<B>(slice).await?;
+            slice = slice_tmp;
+
+            match record {
+                Record::End => break,
+                _ => records.push(record),
+            }
+        }
+
+        let (rem, options) = NameResolutionOption::async_opts_from_slice::<B>(slice).await?;
+
+        let block = NameResolutionBlock { records, options };
+
+        Ok((rem, block))
+    }
+
+    async fn async_write_to<B: ByteOrder, W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> IoResult<usize> {
+        let mut len = 0;
+
+        for record in &self.records {
+            len += record.async_write_to::<B, _>(writer).await?;
+        }
+        len += Record::End.async_write_to::<B, _>(writer).await?;
+
+        len += NameResolutionOption::async_write_opts_to::<B, _>(&self.options, writer).await?;
+
+        Ok(len)
+    }
+}
+
 /// Resolution block record types
 #[derive(Clone, Debug, IntoOwned, Eq, PartialEq)]
 pub enum Record<'a> {
@@ -78,8 +123,8 @@ pub enum Record<'a> {
 impl<'a> Record<'a> {
     /// Parse a [`Record`] from a slice
     pub fn from_slice<B: ByteOrder>(mut slice: &'a [u8]) -> Result<(&'a [u8], Self), PcapError> {
-        let type_ = slice.read_u16::<B>().map_err(|_| PcapError::IncompleteBuffer)?;
-        let length = slice.read_u16::<B>().map_err(|_| PcapError::IncompleteBuffer)?;
+        let type_ = ReadBytesExt::read_u16::<B>(&mut slice).map_err(|_| PcapError::IncompleteBuffer)?;
+        let length = ReadBytesExt::read_u16::<B>(&mut slice).map_err(|_| PcapError::IncompleteBuffer)?;
         let pad_len = (4 - length % 4) % 4;
 
         if slice.len() < length as usize {
@@ -165,6 +210,98 @@ impl<'a> Record<'a> {
     }
 }
 
+#[cfg(feature = "tokio")]
+
+impl<'a> Record<'a> {
+    /// Parse a [`Record`] from a slice
+    pub async fn async_from_slice<B: ByteOrder>(mut slice: &'a [u8]) -> Result<(&'a [u8], Record<'a>), PcapError> {
+        let type_ = AsyncReadBytesExt::read_u16::<B>(&mut slice).await.map_err(|_| PcapError::IncompleteBuffer)?;
+        let length = AsyncReadBytesExt::read_u16::<B>(&mut slice).await.map_err(|_| PcapError::IncompleteBuffer)?;
+        let pad_len = (4 - length % 4) % 4;
+
+        if slice.len() < length as usize {
+            return Err(PcapError::InvalidField("NameResolutionBlock: Record length > slice.len()"));
+        }
+        let value = &slice[..length as usize];
+
+        let record = match type_ {
+            0 => {
+                if length != 0 {
+                    return Err(PcapError::InvalidField("NameResolutionBlock: nrb_record_end length != 0"));
+                }
+                Record::End
+            },
+
+            1 => {
+                let record = Ipv4Record::from_slice(value)?;
+                Record::Ipv4(record)
+            },
+
+            2 => {
+                let record = Ipv6Record::from_slice(value)?;
+                Record::Ipv6(record)
+            },
+
+            _ => {
+                let record = UnknownRecord::new(type_, length, value);
+                Record::Unknown(record)
+            },
+        };
+
+        let len = length as usize + pad_len as usize;
+
+        Ok((&slice[len..], record))
+    }
+
+    /// Write a [`Record`] to a writer
+    pub async fn async_write_to<B: ByteOrder, W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> IoResult<usize> {
+        match self {
+            Record::End => {
+                writer.write_u16::<B>(0).await?;
+                writer.write_u16::<B>(0).await?;
+
+                Ok(4)
+            },
+
+            Record::Ipv4(a) => {
+                let len = a.async_write_to::<B, _>(&mut tokio::io::sink()).await.unwrap();
+                let pad_len = (4 - len % 4) % 4;
+
+                writer.write_u16::<B>(1).await?;
+                writer.write_u16::<B>(len as u16).await?;
+                a.async_write_to::<B, _>(writer).await?;
+                tokio::io::AsyncWriteExt::write_all(writer, &[0_u8; 3][..pad_len]).await?;
+
+                Ok(4 + len + pad_len)
+            },
+
+            Record::Ipv6(a) => {
+                let len = a.async_write_to::<B, _>(&mut tokio::io::sink()).await.unwrap();
+                let pad_len = (4 - len % 4) % 4;
+
+                writer.write_u16::<B>(2).await?;
+                writer.write_u16::<B>(len as u16).await?;
+                a.async_write_to::<B, _>(writer).await?;
+                tokio::io::AsyncWriteExt::write_all(writer, &[0_u8; 3][..pad_len]).await?;
+
+                Ok(4 + len + pad_len)
+            },
+
+            Record::Unknown(a) => {
+                let len = a.value.len();
+                let pad_len = (4 - len % 4) % 4;
+
+                writer.write_u16::<B>(a.type_).await?;
+                writer.write_u16::<B>(a.length).await?;
+                tokio::io::AsyncWriteExt::write_all(writer, &a.value).await?;
+                tokio::io::AsyncWriteExt::write_all(writer, &[0_u8; 3][..pad_len]).await?;
+
+                Ok(4 + len + pad_len)
+            },
+        }
+    }
+}
+
 /// Ipv4 records
 #[derive(Clone, Debug, IntoOwned, Eq, PartialEq)]
 pub struct Ipv4Record<'a> {
@@ -216,8 +353,24 @@ impl<'a> Ipv4Record<'a> {
 
         Ok(len)
     }
-}
 
+    #[cfg(feature = "tokio")]
+    /// Asynchronously write a [`Ipv4Record`] to a writter
+    pub async fn async_write_to<B: ByteOrder, W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> IoResult<usize> {
+        let mut len = 4;
+
+        tokio::io::AsyncWriteExt::write_all(writer, &self.ip_addr).await?;
+        for name in &self.names {
+            tokio::io::AsyncWriteExt::write_all(writer, name.as_bytes()).await?;
+            writer.write_u8(0).await?;
+
+            len += name.as_bytes().len();
+            len += 1;
+        }
+
+        Ok(len)
+    }
+}
 
 /// Ipv6 records
 #[derive(Clone, Debug, IntoOwned, Eq, PartialEq)]
@@ -271,6 +424,23 @@ impl<'a> Ipv6Record<'a> {
 
         Ok(len)
     }
+
+    #[cfg(feature = "tokio")]
+    /// Asynchronously write a [`Ipv6Record`] to a writter
+    pub async fn async_write_to<B: ByteOrder, W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> IoResult<usize> {
+        let mut len = 16;
+
+        tokio::io::AsyncWriteExt::write_all(writer, &self.ip_addr).await?;
+        for name in &self.names {
+            tokio::io::AsyncWriteExt::write_all(writer, name.as_bytes()).await?;
+            writer.write_u8(0).await?;
+
+            len += name.as_bytes().len();
+            len += 1;
+        }
+
+        Ok(len)
+    }
 }
 
 /// Unknown records
@@ -290,7 +460,6 @@ impl<'a> UnknownRecord<'a> {
         UnknownRecord { type_, length, value: Cow::Borrowed(value) }
     }
 }
-
 
 /// The Name Resolution Block (NRB) options
 #[derive(Clone, Debug, IntoOwned, Eq, PartialEq)]
@@ -354,6 +523,48 @@ impl<'a> PcapNgOption<'a> for NameResolutionOption<'a> {
             NameResolutionOption::CustomBinary(a) => a.write_opt_to::<B, W>(a.code, writer),
             NameResolutionOption::CustomUtf8(a) => a.write_opt_to::<B, W>(a.code, writer),
             NameResolutionOption::Unknown(a) => a.write_opt_to::<B, W>(a.code, writer),
+        }
+    }
+}
+
+#[cfg(feature = "tokio")]
+#[async_trait::async_trait]
+impl<'a> AsyncPcapNgOption<'a> for NameResolutionOption<'a> {
+    async fn async_from_slice<B: ByteOrder + Send>(code: u16, length: u16, slice: &'a [u8]) -> Result<NameResolutionOption<'a>, PcapError> {
+        let opt = match code {
+            1 => NameResolutionOption::Comment(Cow::Borrowed(std::str::from_utf8(slice)?)),
+            2 => NameResolutionOption::NsDnsName(Cow::Borrowed(std::str::from_utf8(slice)?)),
+            3 => {
+                if slice.len() != 4 {
+                    return Err(PcapError::InvalidField("NameResolutionOption: NsDnsIpv4Addr length != 4"));
+                }
+                NameResolutionOption::NsDnsIpv4Addr(Cow::Borrowed(slice))
+            },
+            4 => {
+                if slice.len() != 16 {
+                    return Err(PcapError::InvalidField("NameResolutionOption: NsDnsIpv6Addr length != 16"));
+                }
+                NameResolutionOption::NsDnsIpv6Addr(Cow::Borrowed(slice))
+            },
+
+            2988 | 19372 => NameResolutionOption::CustomUtf8(CustomUtf8Option::async_from_slice::<B>(code, slice).await?),
+            2989 | 19373 => NameResolutionOption::CustomBinary(CustomBinaryOption::async_from_slice::<B>(code, slice).await?),
+
+            _ => NameResolutionOption::Unknown(UnknownOption::new(code, length, slice)),
+        };
+
+        Ok(opt)
+    }
+
+    async fn async_write_to<B: ByteOrder, W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> IoResult<usize> {
+        match self {
+            NameResolutionOption::Comment(a) => a.async_write_opt_to::<B, W>(1, writer).await,
+            NameResolutionOption::NsDnsName(a) => a.async_write_opt_to::<B, W>(2, writer).await,
+            NameResolutionOption::NsDnsIpv4Addr(a) => a.async_write_opt_to::<B, W>(3, writer).await,
+            NameResolutionOption::NsDnsIpv6Addr(a) => a.async_write_opt_to::<B, W>(4, writer).await,
+            NameResolutionOption::CustomBinary(a) => a.async_write_opt_to::<B, W>(a.code, writer).await,
+            NameResolutionOption::CustomUtf8(a) => a.async_write_opt_to::<B, W>(a.code, writer).await,
+            NameResolutionOption::Unknown(a) => a.async_write_opt_to::<B, W>(a.code, writer).await,
         }
     }
 }

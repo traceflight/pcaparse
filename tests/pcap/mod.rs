@@ -1,12 +1,47 @@
-extern crate pcap_file;
-
 use std::borrow::Cow;
 use std::time::Duration;
 
-use pcap_file::pcap::{PcapHeader, PcapPacket, PcapReader, PcapWriter};
-use pcap_file::TsResolution;
+use pcaparse::pcap::{PcapHeader, PcapPacket, PcapReader, PcapWriter};
+use pcaparse::TsResolution;
 
 static DATA: &[u8; 1455] = include_bytes!("little_endian.pcap");
+
+#[cfg(feature = "tokio")]
+#[tokio::test]
+async fn async_read() {
+    let mut pcap_reader = PcapReader::async_new(&DATA[..]).await.unwrap();
+
+    //Global header len
+    let mut data_len = 24;
+    while let Some(pkt) = pcap_reader.async_next_packet().await {
+        let pkt = pkt.unwrap();
+
+        //Packet header len
+        data_len += 16;
+        data_len += pkt.data.len();
+    }
+
+    assert_eq!(data_len, DATA.len());
+}
+
+#[cfg(feature = "tokio")]
+#[tokio::test]
+async fn async_read_tokio_file() {
+    let reader = tokio::fs::File::open("tests/pcap/little_endian.pcap").await.unwrap();
+    let mut pcap_reader = PcapReader::async_new(reader).await.unwrap();
+
+    //Global header len
+    let mut data_len = 24;
+    while let Some(pkt) = pcap_reader.async_next_packet().await {
+        let pkt = pkt.unwrap();
+
+        //Packet header len
+        data_len += 16;
+        data_len += pkt.data.len();
+    }
+
+    assert_eq!(data_len, DATA.len());
+}
 
 #[test]
 fn read() {
@@ -43,6 +78,24 @@ fn read_zero_snaplen() {
     assert_eq!(data_len, data.len());
 }
 
+#[cfg(feature = "tokio")]
+#[tokio::test]
+async fn async_read_write() {
+    let mut pcap_reader = PcapReader::async_new(&DATA[..]).await.unwrap();
+    let header = pcap_reader.header();
+
+    let mut out = Vec::new();
+    let mut pcap_writer = PcapWriter::async_with_header(out, header).await.unwrap();
+
+    while let Some(pkt) = pcap_reader.async_next_packet().await {
+        pcap_writer.async_write_packet(&pkt.unwrap()).await.unwrap();
+    }
+
+    out = pcap_writer.into_writer();
+
+    assert_eq!(&DATA[..], &out[..]);
+}
+
 #[test]
 fn read_write() {
     let mut pcap_reader = PcapReader::new(&DATA[..]).unwrap();
@@ -53,6 +106,24 @@ fn read_write() {
 
     while let Some(pkt) = pcap_reader.next_packet() {
         pcap_writer.write_packet(&pkt.unwrap()).unwrap();
+    }
+
+    out = pcap_writer.into_writer();
+
+    assert_eq!(&DATA[..], &out[..]);
+}
+
+#[cfg(feature = "tokio")]
+#[tokio::test]
+async fn async_read_write_raw() {
+    let mut pcap_reader = PcapReader::async_new(&DATA[..]).await.unwrap();
+    let header = pcap_reader.header();
+
+    let mut out = Vec::new();
+    let mut pcap_writer = PcapWriter::async_with_header(out, header).await.unwrap();
+
+    while let Some(pkt) = pcap_reader.async_next_raw_packet().await {
+        pcap_writer.async_write_raw_packet(&pkt.unwrap()).await.unwrap();
     }
 
     out = pcap_writer.into_writer();
@@ -88,9 +159,9 @@ fn big_endian() {
         ts_correction: 0,
         ts_accuracy: 0,
         snaplen: 0xFFFF,
-        datalink: pcap_file::DataLink::ETHERNET,
+        datalink: pcaparse::DataLink::ETHERNET,
         ts_resolution: TsResolution::MicroSecond,
-        endianness: pcap_file::Endianness::Big,
+        endianness: pcaparse::Endianness::Big,
     };
 
     let mut pcap_reader = PcapReader::new(&data[..]).unwrap();
@@ -129,9 +200,9 @@ fn little_endian() {
         ts_correction: 0,
         ts_accuracy: 0,
         snaplen: 4096,
-        datalink: pcap_file::DataLink::ETHERNET,
+        datalink: pcaparse::DataLink::ETHERNET,
         ts_resolution: TsResolution::MicroSecond,
-        endianness: pcap_file::Endianness::Little,
+        endianness: pcaparse::Endianness::Little,
     };
 
     let mut pcap_reader = PcapReader::new(&data[..]).unwrap();
@@ -167,9 +238,9 @@ fn little_endian_zero_snaplen() {
         ts_correction: 0,
         ts_accuracy: 0,
         snaplen: 262144, // use MAXIMUM_SNAPLEN
-        datalink: pcap_file::DataLink::ETHERNET,
+        datalink: pcaparse::DataLink::ETHERNET,
         ts_resolution: TsResolution::MicroSecond,
-        endianness: pcap_file::Endianness::Little,
+        endianness: pcaparse::Endianness::Little,
     };
 
     let mut pcap_reader = PcapReader::new(&data[..]).unwrap();

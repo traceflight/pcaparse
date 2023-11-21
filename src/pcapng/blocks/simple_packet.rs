@@ -1,19 +1,25 @@
 //! Simple Packet Block (SPB).
 
 use std::borrow::Cow;
-use std::io::{Result as IoResult, Write};
+use std::io::Result as IoResult;
+use std::io::Write;
 
-use byteorder_slice::byteorder::WriteBytesExt;
-use byteorder_slice::result::ReadSlice;
-use byteorder_slice::ByteOrder;
+use byteorder::ByteOrder;
+
+use byteorder::{ReadBytesExt, WriteBytesExt};
 use derive_into_owned::IntoOwned;
+#[cfg(feature = "tokio")]
+use tokio::io::AsyncWrite;
+#[cfg(feature = "tokio")]
+use tokio_byteorder::{AsyncReadBytesExt, AsyncWriteBytesExt};
 
+#[cfg(feature = "tokio")]
+use super::block_common::AsyncPcapNgBlock;
 use super::block_common::{Block, PcapNgBlock};
 use crate::errors::PcapError;
 
-
 /// The Simple Packet Block (SPB) is a lightweight container for storing the packets coming from the network.
-/// 
+///
 /// Its presence is optional.
 #[derive(Clone, Debug, IntoOwned, Eq, PartialEq)]
 pub struct SimplePacketBlock<'a> {
@@ -29,7 +35,7 @@ impl<'a> PcapNgBlock<'a> for SimplePacketBlock<'a> {
         if slice.len() < 4 {
             return Err(PcapError::InvalidField("SimplePacketBlock: block length < 4"));
         }
-        let original_len = slice.read_u32::<B>().unwrap();
+        let original_len = ReadBytesExt::read_u32::<B>(&mut slice).unwrap();
 
         let packet = SimplePacketBlock { original_len, data: Cow::Borrowed(slice) };
 
@@ -48,5 +54,30 @@ impl<'a> PcapNgBlock<'a> for SimplePacketBlock<'a> {
 
     fn into_block(self) -> Block<'a> {
         Block::SimplePacket(self)
+    }
+}
+
+#[cfg(feature = "tokio")]
+#[async_trait::async_trait]
+impl<'a> AsyncPcapNgBlock<'a> for SimplePacketBlock<'a> {
+    async fn async_from_slice<B: ByteOrder + Send>(mut slice: &'a [u8]) -> Result<(&'a [u8], Self), PcapError> {
+        if slice.len() < 4 {
+            return Err(PcapError::InvalidField("SimplePacketBlock: block length < 4"));
+        }
+        let original_len = AsyncReadBytesExt::read_u32::<B>(&mut slice).await.unwrap();
+
+        let packet = SimplePacketBlock { original_len, data: Cow::Borrowed(slice) };
+
+        Ok((&[], packet))
+    }
+
+    async fn async_write_to<B: ByteOrder, W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> IoResult<usize> {
+        writer.write_u32::<B>(self.original_len).await?;
+        tokio::io::AsyncWriteExt::write_all(writer, &self.data).await?;
+
+        let pad_len = (4 - (self.data.len() % 4)) % 4;
+        tokio::io::AsyncWriteExt::write_all(writer, &[0_u8; 3][..pad_len]).await?;
+
+        Ok(4 + self.data.len() + pad_len)
     }
 }

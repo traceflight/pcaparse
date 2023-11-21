@@ -1,11 +1,16 @@
-use std::io::{Error, ErrorKind, Read};
+#[cfg(feature = "tokio")]
+use std::future::Future;
+use std::io::Read;
+use std::io::{Error, ErrorKind};
+
+#[cfg(feature = "tokio")]
+use tokio::io::{AsyncRead, AsyncReadExt};
 
 use crate::PcapError;
 
-
 /// Internal structure that bufferize its input and allow to parse element from its buffer.
 #[derive(Debug)]
-pub(crate) struct ReadBuffer<R: Read> {
+pub(crate) struct ReadBuffer<R> {
     /// Reader from which we read the data from
     reader: R,
     /// Internal buffer
@@ -16,7 +21,7 @@ pub(crate) struct ReadBuffer<R: Read> {
     len: usize,
 }
 
-impl<R: Read> ReadBuffer<R> {
+impl<R> ReadBuffer<R> {
     /// Creates a new ReadBuffer with capacity of 8_000_000
     pub fn new(reader: R) -> Self {
         Self::with_capacity(reader, 8_000_000)
@@ -27,6 +32,51 @@ impl<R: Read> ReadBuffer<R> {
         Self { reader, buffer: vec![0_u8; capacity], pos: 0, len: 0 }
     }
 
+    /// Advance the internal buffer position.
+    fn advance(&mut self, nb_bytes: usize) {
+        assert!(self.pos + nb_bytes <= self.len);
+        self.pos += nb_bytes;
+    }
+
+    /// Advance the internal buffer position.
+    fn advance_with_slice(&mut self, rem: &[u8]) {
+        // Compute the length between the buffer and the slice
+        let diff_len = (rem.as_ptr() as usize)
+            .checked_sub(self.buffer().as_ptr() as usize)
+            .expect("Rem is not a sub slice of self.buffer");
+
+        self.advance(diff_len)
+    }
+
+    /// Return the valid data of the internal buffer
+    pub fn buffer(&self) -> &[u8] {
+        &self.buffer[self.pos..self.len]
+    }
+
+    /// Return the inner reader
+    pub fn into_inner(self) -> R {
+        self.reader
+    }
+
+    /// Return a reference over the inner reader
+    pub fn get_ref(&self) -> &R {
+        &self.reader
+    }
+}
+
+impl<R> AsRef<R> for ReadBuffer<R> {
+    fn as_ref(&self) -> &R {
+        &self.reader
+    }
+}
+
+impl<R> AsMut<R> for ReadBuffer<R> {
+    fn as_mut(&mut self) -> &mut R {
+        &mut self.reader
+    }
+}
+
+impl<R: Read> ReadBuffer<R> {
     /// Parse data from the internal buffer
     ///
     /// Safety
@@ -86,27 +136,6 @@ impl<R: Read> ReadBuffer<R> {
         Ok(nb_read)
     }
 
-    /// Advance the internal buffer position.
-    fn advance(&mut self, nb_bytes: usize) {
-        assert!(self.pos + nb_bytes <= self.len);
-        self.pos += nb_bytes;
-    }
-
-    /// Advance the internal buffer position.
-    fn advance_with_slice(&mut self, rem: &[u8]) {
-        // Compute the length between the buffer and the slice
-        let diff_len = (rem.as_ptr() as usize)
-            .checked_sub(self.buffer().as_ptr() as usize)
-            .expect("Rem is not a sub slice of self.buffer");
-
-        self.advance(diff_len)
-    }
-
-    /// Return the valid data of the internal buffer
-    pub fn buffer(&self) -> &[u8] {
-        &self.buffer[self.pos..self.len]
-    }
-
     /// Return true there are some data that can be read
     pub fn has_data_left(&mut self) -> Result<bool, std::io::Error> {
         // The buffer can be empty and the reader can still have data
@@ -119,18 +148,103 @@ impl<R: Read> ReadBuffer<R> {
 
         Ok(true)
     }
-
-    /// Return the inner reader
-    pub fn into_inner(self) -> R {
-        self.reader
-    }
-
-    /// Return a reference over the inner reader
-    pub fn get_ref(&self) -> &R {
-        &self.reader
-    }
 }
 
+#[cfg(feature = "tokio")]
+impl<R: AsyncRead + Unpin> ReadBuffer<R> {
+    pub async fn async_parse_with<'a, 'b: 'a, 'c: 'a, F, Fut, O>(&'c mut self, mut parser: F) -> Result<O, PcapError>
+    where
+        F: FnMut(&'a [u8]) -> Fut,
+        F: 'b,
+        Fut: Future<Output = Result<(&'a [u8], O), PcapError>> + 'a,
+        O: 'a,
+    {
+        self.async_parse_with_context((), move |_, src| {
+            let fut = parser(src);
+            async { (fut.await, ()) }
+        })
+        .await
+    }
+
+    /// Parse data from the internal buffer
+    ///
+    /// Safety
+    ///
+    /// The parser must NOT keep a reference to the buffer in input.
+    pub async fn async_parse_with_context<'a, 'b: 'a, 'c: 'a, Context, F, Fut, O>(
+        &'c mut self,
+        mut context: Context,
+        mut parser: F,
+    ) -> Result<O, PcapError>
+    where
+        F: FnMut(Context, &'a [u8]) -> Fut,
+        F: 'b,
+        Fut: Future<Output = (Result<(&'a [u8], O), PcapError>, Context)> + 'a,
+        O: 'a,
+    {
+        loop {
+            let buf = &self.buffer[self.pos..self.len];
+
+            // Sound because 'b and 'c must outlive 'a so the buffer cannot be modified while someone has a ref on it
+            let buf: &'a [u8] = unsafe { std::mem::transmute(buf) };
+
+            let result = parser(context, buf).await;
+            context = result.1;
+            match result.0 {
+                Ok((rem, value)) => {
+                    self.advance_with_slice(rem);
+                    return Ok(value);
+                },
+
+                Err(PcapError::IncompleteBuffer) => {
+                    // The parsed data len should never be more than the buffer capacity
+                    if buf.len() == self.buffer.len() {
+                        return Err(PcapError::IoError(Error::from(ErrorKind::UnexpectedEof)));
+                    }
+
+                    let nb_read = self.async_fill_buf().await.map_err(PcapError::IoError)?;
+                    if nb_read == 0 {
+                        return Err(PcapError::IoError(Error::from(ErrorKind::UnexpectedEof)));
+                    }
+                },
+
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    /// Fill the inner buffer.
+    /// Copy the remaining data inside buffer at its start and the fill the end part with data from the reader.
+    async fn async_fill_buf(&mut self) -> Result<usize, std::io::Error> {
+        // Copy the remaining data to the start of the buffer
+        let rem_len = unsafe {
+            let buf_ptr_mut = self.buffer.as_mut_ptr();
+            let rem_ptr_mut = buf_ptr_mut.add(self.pos);
+            std::ptr::copy(rem_ptr_mut, buf_ptr_mut, self.len - self.pos);
+            self.len - self.pos
+        };
+
+        let nb_read = self.reader.read(&mut self.buffer[rem_len..]).await?;
+
+        self.len = rem_len + nb_read;
+        self.pos = 0;
+
+        Ok(nb_read)
+    }
+
+    /// Return true there are some data that can be read
+    pub async fn async_has_data_left(&mut self) -> Result<bool, std::io::Error> {
+        // The buffer can be empty and the reader can still have data
+        if self.buffer().is_empty() {
+            let nb_read = self.async_fill_buf().await?;
+            if nb_read == 0 {
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
+}
 #[cfg(test)]
 mod test {
     /*
