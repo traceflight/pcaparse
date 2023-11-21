@@ -1,7 +1,7 @@
 [package]
 name = "pcaparse"
 edition = "2021"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["julian <traceflight@outlook.com>"]
 description = "A crate to parse, read and write Pcap and PcapNg"
 
@@ -44,5 +44,4 @@ harness = false
 lto = "fat"
 
 [features]
-default = ["tokio"]
 tokio = ["dep:tokio", "tokio-byteorder"]
