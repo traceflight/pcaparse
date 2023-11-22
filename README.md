@@ -15,6 +15,11 @@ Provides parsers, readers and writers for Pcap and PcapNg data.
 * The sync and async processing share similar logic but divided into two crates, which will increase the difficulty of fixing problems.
 
 
+## To do
+
+- [ ] Fix timestamp of pcapng
+- [ ] Support .cap format (Network Associates Sniffer)
+
 ## Crate Features
 
 `tokio` enables async reading and writing via `tokio` crate.
