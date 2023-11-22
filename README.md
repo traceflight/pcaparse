@@ -8,11 +8,16 @@ Provides parsers, readers and writers for Pcap and PcapNg data.
 [![rustdoc](https://img.shields.io/badge/Doc-pcaparse-green.svg)](https://docs.rs/pcaparse/)
 [![Crates.io](https://img.shields.io/crates/l/pcaparse.svg)](https://github.com/traceflight/pcaparse/blob/main/LICENSE)
 
-## 
 
-## Documentation
-<https://docs.rs/pcaparse>
+## Why this crate
 
+* I previously made a [PR](https://github.com/courvoif/pcap-file/pull/34) to [pcap-file](https://github.com/courvoif/pcap-file) repo to handle a snaplen issue, but the author seems has no time to maintain it.
+* The sync and async processing share similar logic but divided into two crates, which will increase the difficulty of fixing problems.
+
+
+## Crate Features
+
+`tokio` enables async reading and writing via `tokio` crate.
 
 ## Installation
 This crate is on [crates.io](https://crates.io/crates/pcaparse).
@@ -20,12 +25,8 @@ Add it to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-pcaparse = "0.1.0"
+pcaparse = "0.1"
 ```
-
-## Crate Features
-
-`tokio` enables async reading and writing via `tokio` crate.
 
 ## Examples
 
