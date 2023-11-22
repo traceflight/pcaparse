@@ -71,7 +71,7 @@ while let Some(block) = pcapng_reader.next_block() {
 
 ### Async PcapReader
 
-**enable tokio feature first**
+enable `tokio` feature first
 
 ```rust,no_run
 use tokio::fs::File;
@@ -92,9 +92,9 @@ async fn main() {
 }
 ```
 
-### Async PcapReader from tokio's TcpStream
+### Async PcapReader from tokio's TcpStream (AKA pcap-over-ip)
 
-**enable tokio feature first**
+enable `tokio` feature first
 
 ```rust,no_run
 use tokio::net::{TcpListener, TcpStream};
@@ -125,7 +125,7 @@ async fn process(stream: TcpStream) {
 
 ### Async PcapNgReader from tokio's File
 
-**enable tokio feature first**
+enable `tokio` feature first
 
 ```rust,no_run
 use tokio::fs::File;
