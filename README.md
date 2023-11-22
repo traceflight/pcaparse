@@ -1,6 +1,6 @@
 # pcaparse
 
-This is a combination of awesome [pcap-file](https://github.com/courvoif/pcap-file) crate and [pcap-file-tokio](https://github.com/mauricelam/pcap-file-tokio) crate with some issues fixed.
+This is a combination of awesome [pcap-file](https://github.com/courvoif/pcap-file) crate and [pcap-file-tokio](https://github.com/mauricelam/pcap-file-tokio) crate with some issues fixed and new features added.
 
 
 Provides parsers, readers and writers for Cap(Network Associates Sniffer 2.x), Pcap and PcapNg files.
