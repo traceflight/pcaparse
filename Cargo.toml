@@ -9,7 +9,7 @@ license = "MIT"
 documentation = "https://docs.rs/pcaparse/"
 repository = "https://github.com/traceflight/pcaparse"
 readme = "README.md"
-keywords = ["pcap", "pcapng", "cap", "parse", "read", "write"]
+keywords = ["pcap", "pcapng", "cap", "parse", "write"]
 categories = ["encoding", "parsing"]
 
 exclude = [
