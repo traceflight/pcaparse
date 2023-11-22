@@ -16,7 +16,7 @@ exclude = ["benches/bench.pcap", "benches/bench.pcapng", "fuzz", "tests"]
 
 
 [dependencies]
-async-trait = "0.1.74"
+async-trait = { version = "0.1.74", optional = true }
 byteorder = "1.5.0"
 derive-into-owned = "0.2.0"
 thiserror = "1.0.50"
@@ -44,4 +44,4 @@ harness = false
 lto = "fat"
 
 [features]
-tokio = ["dep:tokio", "tokio-byteorder"]
+tokio = ["async-trait", "dep:tokio", "tokio-byteorder"]
