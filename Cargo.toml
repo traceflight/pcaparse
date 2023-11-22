@@ -1,7 +1,7 @@
 [package]
 name = "pcaparse"
 edition = "2021"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["julian <traceflight@outlook.com>"]
 description = "A crate to parse, read and write Pcap and PcapNg"
 
