@@ -2,7 +2,8 @@
 
 This is a combination of awesome [pcap-file](https://github.com/courvoif/pcap-file) crate and [pcap-file-tokio](https://github.com/mauricelam/pcap-file-tokio) crate with some issues fixed.
 
-Provides parsers, readers and writers for Pcap and PcapNg data.
+
+Provides parsers, readers and writers for Cap(Network Associates Sniffer 2.x), Pcap and PcapNg files.
 
 [![Crates.io](https://img.shields.io/crates/v/pcaparse.svg)](https://crates.io/crates/pcaparse)
 [![rustdoc](https://img.shields.io/badge/Doc-pcaparse-green.svg)](https://docs.rs/pcaparse/)
@@ -18,7 +19,8 @@ Provides parsers, readers and writers for Pcap and PcapNg data.
 ## To do
 
 - [ ] Fix timestamp of pcapng
-- [ ] Support .cap format (Network Associates Sniffer)
+- [x] Support .cap format (Network Associates Sniffer 2.x) parser and reader
+- [ ] Support .cap format (Network Associates Sniffer 2.x) writer
 
 ## Crate Features
 
@@ -52,22 +54,6 @@ while let Some(pkt) = pcap_reader.next_packet() {
  }
 ```
 
-### PcapNgReader
-```rust,no_run
-use std::fs::File;
-use pcaparse::pcapng::PcapNgReader;
-
-let file_in = File::open("test.pcapng").expect("Error opening file");
-let mut pcapng_reader = PcapNgReader::new(file_in).unwrap();
-
-// Read test.pcapng
-while let Some(block) = pcapng_reader.next_block() {
-    // Check if there is no error
-    let block = block.unwrap();
-
-    //  Do something
-}
-```
 
 ### Async PcapReader
 
@@ -123,6 +109,23 @@ async fn process(stream: TcpStream) {
 }
 ```
 
+### PcapNgReader
+```rust,no_run
+use std::fs::File;
+use pcaparse::pcapng::PcapNgReader;
+
+let file_in = File::open("test.pcapng").expect("Error opening file");
+let mut pcapng_reader = PcapNgReader::new(file_in).unwrap();
+
+// Read test.pcapng
+while let Some(block) = pcapng_reader.next_block() {
+    // Check if there is no error
+    let block = block.unwrap();
+
+    //  Do something
+}
+```
+
 ### Async PcapNgReader from tokio's File
 
 enable `tokio` feature first
@@ -142,6 +145,47 @@ async fn main() {
         let block = block.unwrap();
 
         //  Do something
+    }
+}
+```
+
+
+### CapReader
+```rust,no_run
+use std::fs::File;
+use pcaparse::cap::CapReader;
+
+let file_in = File::open("test.cap").expect("Error opening file");
+let mut cap_reader = CapReader::new(file_in).unwrap();
+
+// Read test.cap
+while let Some(pkt) = cap_reader.next_packet() {
+    //Check if there is no error
+    let pkt = pkt.unwrap();
+
+    //Do something
+ }
+```
+
+### Async CapReader
+
+enable `tokio` feature first
+
+```rust,no_run
+use tokio::fs::File;
+use pcaparse::cap::CapReader;
+
+#[tokio::main]
+async fn main() {
+    let file_in = File::open("test.cap").await.expect("Error opening file");
+    let mut cap_reader = CapReader::async_new(file_in).await.unwrap();
+
+    // Read test.cap
+    while let Some(pkt) = cap_reader.async_next_packet().await {
+        //Check if there is no error
+        let pkt = pkt.unwrap();
+
+        //Do something
     }
 }
 ```

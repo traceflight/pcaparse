@@ -29,6 +29,10 @@ pub enum PcapError {
     /// Invalid interface ID (only for Pcap NG)
     #[error("No corresponding interface id: {0}")]
     InvalidInterfaceId(u32),
+
+    /// Unsupported version
+    #[error("Unsupported version: {0}")]
+    UnsupportedVersion(String),
 }
 
 impl From<std::str::Utf8Error> for PcapError {

@@ -1,18 +1,24 @@
 [package]
 name = "pcaparse"
 edition = "2021"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["julian <traceflight@outlook.com>"]
-description = "A crate to parse, read and write Pcap and PcapNg"
+description = "A crate to parse, read and write Cap(NA Sniffer 2.x), Pcap and PcapNg"
 
 license = "MIT"
 documentation = "https://docs.rs/pcaparse/"
 repository = "https://github.com/traceflight/pcaparse"
 readme = "README.md"
-keywords = ["pcap", "pcapng", "parse", "read", "write"]
+keywords = ["pcap", "pcapng", "cap", "parse", "read", "write"]
 categories = ["encoding", "parsing"]
 
-exclude = ["benches/bench.pcap", "benches/bench.pcapng", "fuzz", "tests"]
+exclude = [
+    "benches/bench.pcap",
+    "benches/bench.pcapng",
+    "benches/bench.cap",
+    "fuzz",
+    "tests",
+]
 
 
 [dependencies]
