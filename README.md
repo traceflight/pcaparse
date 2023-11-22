@@ -19,8 +19,8 @@ Provides parsers, readers and writers for Cap(Network Associates Sniffer 2.x), P
 ## To do
 
 - [ ] Fix timestamp of pcapng
-- [x] Support .cap format (Network Associates Sniffer 2.x) parser and reader
-- [ ] Support .cap format (Network Associates Sniffer 2.x) writer
+- [x] Add parser and reader for cap(Network Associates Sniffer 2.x) file
+- [ ] Add writer for cap(Network Associates Sniffer 2.x) file
 
 ## Crate Features
 
