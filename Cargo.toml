@@ -50,4 +50,5 @@ harness = false
 lto = "fat"
 
 [features]
+default = ["tokio"]
 tokio = ["async-trait", "dep:tokio", "tokio-byteorder"]

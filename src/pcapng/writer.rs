@@ -130,6 +130,8 @@ impl<W: Write> PcapNgWriter<W> {
     ///     linktype: DataLink::ETHERNET,
     ///     snaplen: 0xFFFF,
     ///     options: vec![],
+    ///     ts_offset: None,
+    ///     ts_resol: None,
     /// };
     ///
     /// let packet = EnhancedPacketBlock {
@@ -138,6 +140,8 @@ impl<W: Write> PcapNgWriter<W> {
     ///     original_len: data.len() as u32,
     ///     data: Cow::Borrowed(&data),
     ///     options: vec![],
+    ///     timestamp_num: 0,
+    ///     linktype: DataLink::ETHERNET,
     /// };
     ///
     /// let file = File::create("out.pcap").expect("Error creating file");
@@ -194,6 +198,8 @@ impl<W: Write> PcapNgWriter<W> {
     ///     linktype: DataLink::ETHERNET,
     ///     snaplen: 0xFFFF,
     ///     options: vec![],
+    ///     ts_offset: None,
+    ///     ts_resol: None,
     /// };
     ///
     /// let packet = EnhancedPacketBlock {
@@ -202,6 +208,8 @@ impl<W: Write> PcapNgWriter<W> {
     ///     original_len: data.len() as u32,
     ///     data: Cow::Borrowed(&data),
     ///     options: vec![],
+    ///     timestamp_num: 0,
+    ///     linktype: DataLink::ETHERNET,
     /// };
     ///
     /// let file = File::create("out.pcap").expect("Error creating file");
@@ -304,6 +312,8 @@ impl<W: AsyncWrite + Unpin + Send> PcapNgWriter<W> {
     ///     linktype: DataLink::ETHERNET,
     ///     snaplen: 0xFFFF,
     ///     options: vec![],
+    ///     ts_offset: None,
+    ///     ts_resol: None,
     /// };
     ///
     /// let packet = EnhancedPacketBlock {
@@ -311,6 +321,8 @@ impl<W: AsyncWrite + Unpin + Send> PcapNgWriter<W> {
     ///     timestamp: Duration::from_secs(0),
     ///     original_len: data.len() as u32,
     ///     data: Cow::Borrowed(&data),
+    ///     timestamp_num: 0,
+    ///     linktype: DataLink::ETHERNET,
     ///     options: vec![],
     /// };
     ///
@@ -370,6 +382,8 @@ impl<W: AsyncWrite + Unpin + Send> PcapNgWriter<W> {
     ///     linktype: DataLink::ETHERNET,
     ///     snaplen: 0xFFFF,
     ///     options: vec![],
+    ///     ts_offset: None,
+    ///     ts_resol: None,
     /// };
     ///
     /// let packet = EnhancedPacketBlock {
@@ -377,6 +391,8 @@ impl<W: AsyncWrite + Unpin + Send> PcapNgWriter<W> {
     ///     timestamp: Duration::from_secs(0),
     ///     original_len: data.len() as u32,
     ///     data: Cow::Borrowed(&data),
+    ///     timestamp_num: 0,
+    ///     linktype: DataLink::ETHERNET,
     ///     options: vec![],
     /// };
     ///

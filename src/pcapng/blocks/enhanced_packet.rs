@@ -21,6 +21,7 @@ use super::block_common::{Block, PcapNgBlock};
 use super::opt_common::{AsyncPcapNgOption, AsyncWriteOptTo};
 use super::opt_common::{CustomBinaryOption, CustomUtf8Option, PcapNgOption, UnknownOption, WriteOptTo};
 use crate::errors::PcapError;
+use crate::DataLink;
 
 /// An Enhanced Packet Block (EPB) is the standard container for storing the packets coming from the network.
 #[derive(Clone, Debug, IntoOwned, Eq, PartialEq)]
@@ -31,8 +32,15 @@ pub struct EnhancedPacketBlock<'a> {
     /// (within the current Section of the file) is identified by the same number of this field.
     pub interface_id: u32,
 
+    /// Timestamp number stored in data
+    pub timestamp_num: u64,
+
     /// Number of units of time that have elapsed since 1970-01-01 00:00:00 UTC.
+    /// Temporarily, the timestamp is calculated in macroseconds as the timeunit.
     pub timestamp: Duration,
+
+    /// Linktype update from IDB, use ethernet as default.
+    pub linktype: DataLink,
 
     /// Actual length of the packet when it was transmitted on the network.
     pub original_len: u32,
@@ -53,7 +61,7 @@ impl<'a> PcapNgBlock<'a> for EnhancedPacketBlock<'a> {
         let interface_id = ReadBytesExt::read_u32::<B>(&mut slice).unwrap();
         let timestamp_high = ReadBytesExt::read_u32::<B>(&mut slice).unwrap() as u64;
         let timestamp_low = ReadBytesExt::read_u32::<B>(&mut slice).unwrap() as u64;
-        let timestamp = (timestamp_high << 32) + timestamp_low;
+        let timestamp_num = (timestamp_high << 32) + timestamp_low;
         let captured_len = ReadBytesExt::read_u32::<B>(&mut slice).unwrap();
         let original_len = ReadBytesExt::read_u32::<B>(&mut slice).unwrap();
 
@@ -70,7 +78,9 @@ impl<'a> PcapNgBlock<'a> for EnhancedPacketBlock<'a> {
         let (slice, options) = EnhancedPacketOption::opts_from_slice::<B>(slice)?;
         let block = EnhancedPacketBlock {
             interface_id,
-            timestamp: Duration::from_nanos(timestamp),
+            timestamp_num,
+            timestamp: Duration::from_micros(timestamp_num),
+            linktype: DataLink::ETHERNET,
             original_len,
             data: Cow::Borrowed(data),
             options,
@@ -84,7 +94,7 @@ impl<'a> PcapNgBlock<'a> for EnhancedPacketBlock<'a> {
 
         writer.write_u32::<B>(self.interface_id)?;
 
-        let timestamp = self.timestamp.as_nanos();
+        let timestamp = self.timestamp_num;
         let timestamp_high = (timestamp >> 32) as u32;
         writer.write_u32::<B>(timestamp_high)?;
         let timestamp_low = (timestamp & 0xFFFFFFFF) as u32;
@@ -116,7 +126,7 @@ impl<'a> AsyncPcapNgBlock<'a> for EnhancedPacketBlock<'a> {
         let interface_id = AsyncReadBytesExt::read_u32::<B>(&mut slice).await.unwrap();
         let timestamp_high = AsyncReadBytesExt::read_u32::<B>(&mut slice).await.unwrap() as u64;
         let timestamp_low = AsyncReadBytesExt::read_u32::<B>(&mut slice).await.unwrap() as u64;
-        let timestamp = (timestamp_high << 32) + timestamp_low;
+        let timestamp_num = (timestamp_high << 32) + timestamp_low;
         let captured_len = AsyncReadBytesExt::read_u32::<B>(&mut slice).await.unwrap();
         let original_len = AsyncReadBytesExt::read_u32::<B>(&mut slice).await.unwrap();
 
@@ -133,7 +143,9 @@ impl<'a> AsyncPcapNgBlock<'a> for EnhancedPacketBlock<'a> {
         let (slice, options) = EnhancedPacketOption::async_opts_from_slice::<B>(slice).await?;
         let block = EnhancedPacketBlock {
             interface_id,
-            timestamp: Duration::from_nanos(timestamp),
+            timestamp_num,
+            timestamp: Duration::from_micros(timestamp_num),
+            linktype: DataLink::ETHERNET,
             original_len,
             data: Cow::Borrowed(data),
             options,
@@ -147,7 +159,7 @@ impl<'a> AsyncPcapNgBlock<'a> for EnhancedPacketBlock<'a> {
 
         writer.write_u32::<B>(self.interface_id).await?;
 
-        let timestamp = self.timestamp.as_nanos();
+        let timestamp = self.timestamp_num;
         let timestamp_high = (timestamp >> 32) as u32;
         writer.write_u32::<B>(timestamp_high).await?;
         let timestamp_low = (timestamp & 0xFFFFFFFF) as u32;

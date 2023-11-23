@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 
 use super::blocks::block_common::{Block, RawBlock};
@@ -87,12 +89,18 @@ impl PcapNgParser {
         match self.section.endianness {
             Endianness::Big => {
                 let (rem, raw_block) = self.next_raw_block_inner::<BigEndian>(src)?;
-                let block = raw_block.try_into_block::<BigEndian>()?;
+                let mut block = raw_block.try_into_block::<BigEndian>()?;
+                if let Block::EnhancedPacket(ref mut packet) = block {
+                    self.update_enhanced_packet_block_ts(packet);
+                }
                 Ok((rem, block))
             },
             Endianness::Little => {
                 let (rem, raw_block) = self.next_raw_block_inner::<LittleEndian>(src)?;
-                let block = raw_block.try_into_block::<LittleEndian>()?;
+                let mut block = raw_block.try_into_block::<LittleEndian>()?;
+                if let Block::EnhancedPacket(ref mut packet) = block {
+                    self.update_enhanced_packet_block_ts(packet);
+                }
                 Ok((rem, block))
             },
         }
@@ -105,12 +113,18 @@ impl PcapNgParser {
         match self.section.endianness {
             Endianness::Big => {
                 let (rem, raw_block) = self.async_next_raw_block_inner::<BigEndian>(src).await?;
-                let block = raw_block.async_try_into_block::<BigEndian>().await?;
+                let mut block = raw_block.async_try_into_block::<BigEndian>().await?;
+                if let Block::EnhancedPacket(ref mut packet) = block {
+                    self.update_enhanced_packet_block_ts(packet);
+                }
                 Ok((rem, block))
             },
             Endianness::Little => {
                 let (rem, raw_block) = self.async_next_raw_block_inner::<LittleEndian>(src).await?;
-                let block = raw_block.async_try_into_block::<LittleEndian>().await?;
+                let mut block = raw_block.async_try_into_block::<LittleEndian>().await?;
+                if let Block::EnhancedPacket(ref mut packet) = block {
+                    self.update_enhanced_packet_block_ts(packet);
+                }
                 Ok((rem, block))
             },
         }
@@ -192,5 +206,20 @@ impl PcapNgParser {
     /// Returns the [`InterfaceDescriptionBlock`] corresponding to the given packet.
     pub fn packet_interface(&self, packet: &EnhancedPacketBlock) -> Option<&InterfaceDescriptionBlock> {
         self.interfaces.get(packet.interface_id as usize)
+    }
+
+    /// Update epb ts
+    pub fn update_enhanced_packet_block_ts(&self, packet: &mut EnhancedPacketBlock) {
+        if let Some(idb) = self.packet_interface(&packet) {
+            let mut micros = packet.timestamp_num;
+            if let Some(ts_divided) = idb.ts_divided_to_second() {
+                micros = ((packet.timestamp_num as f64) / (ts_divided as f64) * (10_u64.pow(6) as f64)) as u64;
+            }
+
+            if let Some(offset) = idb.ts_offset {
+                micros += offset * 10_u64.pow(6);
+            }
+            packet.timestamp = Duration::from_micros(micros);
+        }
     }
 }
