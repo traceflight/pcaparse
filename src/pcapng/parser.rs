@@ -10,7 +10,7 @@ use super::blocks::{INTERFACE_DESCRIPTION_BLOCK, SECTION_HEADER_BLOCK};
 use crate::errors::PcapError;
 use crate::Endianness;
 
-const TS_MICRO_DIVIDE: u64 = 1000000;
+const TS_SECOND_2_MICRO: u64 = 1000000;
 
 /// Parses a PcapNg from a slice of bytes.
 ///
@@ -93,7 +93,7 @@ impl PcapNgParser {
                 let (rem, raw_block) = self.next_raw_block_inner::<BigEndian>(src)?;
                 let mut block = raw_block.try_into_block::<BigEndian>()?;
                 if let Block::EnhancedPacket(ref mut packet) = block {
-                    self.update_enhanced_packet_block_ts(packet);
+                    self.update_enhanced_packet_block(packet);
                 }
                 Ok((rem, block))
             },
@@ -101,7 +101,7 @@ impl PcapNgParser {
                 let (rem, raw_block) = self.next_raw_block_inner::<LittleEndian>(src)?;
                 let mut block = raw_block.try_into_block::<LittleEndian>()?;
                 if let Block::EnhancedPacket(ref mut packet) = block {
-                    self.update_enhanced_packet_block_ts(packet);
+                    self.update_enhanced_packet_block(packet);
                 }
                 Ok((rem, block))
             },
@@ -117,7 +117,7 @@ impl PcapNgParser {
                 let (rem, raw_block) = self.async_next_raw_block_inner::<BigEndian>(src).await?;
                 let mut block = raw_block.async_try_into_block::<BigEndian>().await?;
                 if let Block::EnhancedPacket(ref mut packet) = block {
-                    self.update_enhanced_packet_block_ts(packet);
+                    self.update_enhanced_packet_block(packet);
                 }
                 Ok((rem, block))
             },
@@ -125,7 +125,7 @@ impl PcapNgParser {
                 let (rem, raw_block) = self.async_next_raw_block_inner::<LittleEndian>(src).await?;
                 let mut block = raw_block.async_try_into_block::<LittleEndian>().await?;
                 if let Block::EnhancedPacket(ref mut packet) = block {
-                    self.update_enhanced_packet_block_ts(packet);
+                    self.update_enhanced_packet_block(packet);
                 }
                 Ok((rem, block))
             },
@@ -211,19 +211,22 @@ impl PcapNgParser {
     }
 
     /// Update epb ts
-    pub fn update_enhanced_packet_block_ts(&self, packet: &mut EnhancedPacketBlock) {
+    pub fn update_enhanced_packet_block(&self, packet: &mut EnhancedPacketBlock) {
         if let Some(idb) = self.packet_interface(&packet) {
+            // update linktype
+            packet.linktype = idb.linktype;
+
+            // update ts
             let mut micros = packet.timestamp_num;
             let mut ts_changed = false;
             if let Some(divide) = idb.ts_divide {
-                if divide != TS_MICRO_DIVIDE {
-                    micros = ((packet.timestamp_num as f64) / (divide as f64) * (10_u64.pow(6) as f64)) as u64;
+                if divide != TS_SECOND_2_MICRO {
+                    micros = ((packet.timestamp_num as f64) / (divide as f64) * (TS_SECOND_2_MICRO as f64)) as u64;
                     ts_changed = true;
                 }
             }
-
             if let Some(offset) = idb.ts_offset {
-                micros += offset * 10_u64.pow(6);
+                micros += offset * TS_SECOND_2_MICRO;
                 ts_changed = true;
             }
             if ts_changed {
