@@ -67,6 +67,7 @@ use pcaparse::pcap::PcapReader;
 async fn main() {
     let file_in = File::open("test.pcap").await.expect("Error opening file");
     let mut pcap_reader = PcapReader::async_new(file_in).await.unwrap();
+    let datalink = pcap_reader.header().datalink;
 
     // Read test.pcap
     while let Some(pkt) = pcap_reader.async_next_packet().await {
@@ -157,6 +158,7 @@ use pcaparse::cap::CapReader;
 
 let file_in = File::open("test.cap").expect("Error opening file");
 let mut cap_reader = CapReader::new(file_in).unwrap();
+let datalink = cap_reader.header().datalink;
 
 // Read test.cap
 while let Some(pkt) = cap_reader.next_packet() {
@@ -179,6 +181,7 @@ use pcaparse::cap::CapReader;
 async fn main() {
     let file_in = File::open("test.cap").await.expect("Error opening file");
     let mut cap_reader = CapReader::async_new(file_in).await.unwrap();
+    let datalink = cap_reader.header().datalink;
 
     // Read test.cap
     while let Some(pkt) = cap_reader.async_next_packet().await {

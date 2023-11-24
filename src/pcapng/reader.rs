@@ -77,11 +77,6 @@ impl<R: Read> PcapNgReader<R> {
     pub fn into_inner(self) -> R {
         self.reader.into_inner()
     }
-
-    /// Gets a reference to the wrapped reader.
-    pub fn get_ref(&self) -> &R {
-        self.reader.get_ref()
-    }
 }
 
 #[cfg(feature = "tokio")]
@@ -160,6 +155,11 @@ impl<R> PcapNgReader<R> {
     /// Returns the [`InterfaceDescriptionBlock`] corresponding to the given packet
     pub fn packet_interface(&self, packet: &EnhancedPacketBlock) -> Option<&InterfaceDescriptionBlock> {
         self.interfaces().get(packet.interface_id as usize)
+    }
+
+    /// Gets a reference to the wrapped reader.
+    pub fn get_ref(&self) -> &R {
+        self.reader.get_ref()
     }
 }
 

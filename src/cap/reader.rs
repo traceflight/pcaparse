@@ -34,6 +34,13 @@ pub struct CapReader<R> {
     reader: ReadBuffer<R>,
 }
 
+impl<R> CapReader<R> {
+    /// Returns the global header of the cap.
+    pub fn header(&self) -> CapHeader {
+        self.parser.header()
+    }
+}
+
 impl<R: Read> CapReader<R> {
     /// Creates a new [`CapReader`] from an existing reader.
     ///
@@ -83,11 +90,6 @@ impl<R: Read> CapReader<R> {
             },
             Err(e) => Some(Err(PcapError::IoError(e))),
         }
-    }
-
-    /// Returns the global header of the cap.
-    pub fn header(&self) -> CapHeader {
-        self.parser.header()
     }
 }
 
