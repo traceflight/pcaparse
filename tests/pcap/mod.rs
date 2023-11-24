@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::time::Duration;
 
 use pcaparse::pcap::{PcapHeader, PcapPacket, PcapReader, PcapWriter};
-use pcaparse::TsResolution;
+use pcaparse::{DataLink, TsResolution};
 
 static DATA: &[u8; 1455] = include_bytes!("little_endian.pcap");
 
@@ -10,6 +10,8 @@ static DATA: &[u8; 1455] = include_bytes!("little_endian.pcap");
 #[tokio::test]
 async fn async_read() {
     let mut pcap_reader = PcapReader::async_new(&DATA[..]).await.unwrap();
+    let datalink = pcap_reader.header().datalink;
+    assert_eq!(datalink, DataLink::ETHERNET);
 
     //Global header len
     let mut data_len = 24;
@@ -29,6 +31,8 @@ async fn async_read() {
 async fn async_read_tokio_file() {
     let reader = tokio::fs::File::open("tests/pcap/little_endian.pcap").await.unwrap();
     let mut pcap_reader = PcapReader::async_new(reader).await.unwrap();
+    let datalink = pcap_reader.header().datalink;
+    assert_eq!(datalink, DataLink::ETHERNET);
 
     //Global header len
     let mut data_len = 24;
@@ -46,6 +50,8 @@ async fn async_read_tokio_file() {
 #[test]
 fn read() {
     let mut pcap_reader = PcapReader::new(&DATA[..]).unwrap();
+    let datalink = pcap_reader.header().datalink;
+    assert_eq!(datalink, DataLink::ETHERNET);
 
     //Global header len
     let mut data_len = 24;
@@ -64,6 +70,8 @@ fn read() {
 fn read_zero_snaplen() {
     let data = include_bytes!("little_endian_zero_snaplen.pcap");
     let mut pcap_reader = PcapReader::new(&data[..]).unwrap();
+    let datalink = pcap_reader.header().datalink;
+    assert_eq!(datalink, DataLink::ETHERNET);
 
     //Global header len
     let mut data_len = 24;
