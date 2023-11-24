@@ -210,7 +210,7 @@ impl PcapNgParser {
         self.interfaces.get(packet.interface_id as usize)
     }
 
-    /// Update epb ts
+    /// Update epb
     pub fn update_enhanced_packet_block(&self, packet: &mut EnhancedPacketBlock) {
         if let Some(idb) = self.packet_interface(&packet) {
             // update linktype
