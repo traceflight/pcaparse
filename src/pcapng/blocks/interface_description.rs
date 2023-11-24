@@ -44,20 +44,18 @@ pub struct InterfaceDescriptionBlock<'a> {
     pub options: Vec<InterfaceDescriptionOption<'a>>,
 
     /// The if_tsresol option identifies the resolution of timestamps.
-    pub ts_resol: Option<u8>,
+    pub ts_divide: Option<u64>,
 
     /// The if_tsoffset option is a 64-bit integer value that specifies an offset (in seconds)
     /// that must be added to the timestamp of each packet to obtain the absolute timestamp of a packet.
     pub ts_offset: Option<u64>,
 }
 
-impl<'a> InterfaceDescriptionBlock<'a> {
-    /// Calc ts resol. Timestamp number divide this result to seconds
-    pub fn ts_divided_to_second(&self) -> Option<u64> {
-        self.ts_resol.map(|resol| match resol & 0x80 {
-            0 => 10_u64.pow(resol.into()),
-            _ => 2_u64.pow((resol & 0b01111111).into()),
-        })
+/// Convert ts resol to divide
+fn ts_resol_to_divide(resol: u8) -> u64 {
+    match resol & 0x80 {
+        0 => 10_u64.pow(resol.into()),
+        _ => 2_u64.pow((resol & 0b01111111).into()),
     }
 }
 
@@ -77,10 +75,10 @@ impl<'a> PcapNgBlock<'a> for InterfaceDescriptionBlock<'a> {
         let snaplen = ReadBytesExt::read_u32::<B>(&mut slice).unwrap();
         let (slice, options) = InterfaceDescriptionOption::opts_from_slice::<B>(slice)?;
 
-        let mut ts_resol = None;
+        let mut ts_divide = None;
         if let Some(option) = options.iter().find(|o| matches!(o, InterfaceDescriptionOption::IfTsResol(_))) {
             if let InterfaceDescriptionOption::IfTsResol(resol) = option {
-                ts_resol = Some(*resol);
+                ts_divide = Some(ts_resol_to_divide(*resol));
             }
         }
 
@@ -91,7 +89,7 @@ impl<'a> PcapNgBlock<'a> for InterfaceDescriptionBlock<'a> {
             }
         }
 
-        let block = InterfaceDescriptionBlock { linktype, snaplen, options, ts_resol, ts_offset };
+        let block = InterfaceDescriptionBlock { linktype, snaplen, options, ts_divide, ts_offset };
 
         Ok((slice, block))
     }
@@ -128,10 +126,10 @@ impl<'a> AsyncPcapNgBlock<'a> for InterfaceDescriptionBlock<'a> {
         let snaplen = AsyncReadBytesExt::read_u32::<B>(&mut slice).await.unwrap();
         let (slice, options) = InterfaceDescriptionOption::async_opts_from_slice::<B>(slice).await?;
 
-        let mut ts_resol = None;
+        let mut ts_divide = None;
         if let Some(option) = options.iter().find(|o| matches!(o, InterfaceDescriptionOption::IfTsResol(_))) {
             if let InterfaceDescriptionOption::IfTsResol(resol) = option {
-                ts_resol = Some(*resol);
+                ts_divide = Some(ts_resol_to_divide(*resol));
             }
         }
 
@@ -142,7 +140,7 @@ impl<'a> AsyncPcapNgBlock<'a> for InterfaceDescriptionBlock<'a> {
             }
         }
 
-        let block = InterfaceDescriptionBlock { linktype, snaplen, options, ts_resol, ts_offset };
+        let block = InterfaceDescriptionBlock { linktype, snaplen, options, ts_divide, ts_offset };
 
         Ok((slice, block))
     }
@@ -160,7 +158,7 @@ impl<'a> AsyncPcapNgBlock<'a> for InterfaceDescriptionBlock<'a> {
 impl InterfaceDescriptionBlock<'static> {
     /// Creates a new [`InterfaceDescriptionBlock`]
     pub fn new(linktype: DataLink, snaplen: u32) -> Self {
-        Self { linktype, snaplen, options: vec![], ts_resol: None, ts_offset: None }
+        Self { linktype, snaplen, options: vec![], ts_divide: None, ts_offset: None }
     }
 }
 

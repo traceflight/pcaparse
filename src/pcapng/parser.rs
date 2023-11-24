@@ -10,6 +10,8 @@ use super::blocks::{INTERFACE_DESCRIPTION_BLOCK, SECTION_HEADER_BLOCK};
 use crate::errors::PcapError;
 use crate::Endianness;
 
+const TS_MICRO_DIVIDE: u64 = 1000000;
+
 /// Parses a PcapNg from a slice of bytes.
 ///
 /// You can match on [`PcapError::IncompleteBuffer`] to know if the parser need more data.
@@ -212,14 +214,21 @@ impl PcapNgParser {
     pub fn update_enhanced_packet_block_ts(&self, packet: &mut EnhancedPacketBlock) {
         if let Some(idb) = self.packet_interface(&packet) {
             let mut micros = packet.timestamp_num;
-            if let Some(ts_divided) = idb.ts_divided_to_second() {
-                micros = ((packet.timestamp_num as f64) / (ts_divided as f64) * (10_u64.pow(6) as f64)) as u64;
+            let mut ts_changed = false;
+            if let Some(divide) = idb.ts_divide {
+                if divide != TS_MICRO_DIVIDE {
+                    micros = ((packet.timestamp_num as f64) / (divide as f64) * (10_u64.pow(6) as f64)) as u64;
+                    ts_changed = true;
+                }
             }
 
             if let Some(offset) = idb.ts_offset {
                 micros += offset * 10_u64.pow(6);
+                ts_changed = true;
             }
-            packet.timestamp = Duration::from_micros(micros);
+            if ts_changed {
+                packet.timestamp = Duration::from_micros(micros);
+            }
         }
     }
 }

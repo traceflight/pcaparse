@@ -131,7 +131,7 @@ impl<W: Write> PcapNgWriter<W> {
     ///     snaplen: 0xFFFF,
     ///     options: vec![],
     ///     ts_offset: None,
-    ///     ts_resol: None,
+    ///     ts_divide: None,
     /// };
     ///
     /// let packet = EnhancedPacketBlock {
@@ -199,7 +199,7 @@ impl<W: Write> PcapNgWriter<W> {
     ///     snaplen: 0xFFFF,
     ///     options: vec![],
     ///     ts_offset: None,
-    ///     ts_resol: None,
+    ///     ts_divide: None,
     /// };
     ///
     /// let packet = EnhancedPacketBlock {
@@ -313,7 +313,7 @@ impl<W: AsyncWrite + Unpin + Send> PcapNgWriter<W> {
     ///     snaplen: 0xFFFF,
     ///     options: vec![],
     ///     ts_offset: None,
-    ///     ts_resol: None,
+    ///     ts_divide: None,
     /// };
     ///
     /// let packet = EnhancedPacketBlock {
@@ -383,7 +383,7 @@ impl<W: AsyncWrite + Unpin + Send> PcapNgWriter<W> {
     ///     snaplen: 0xFFFF,
     ///     options: vec![],
     ///     ts_offset: None,
-    ///     ts_resol: None,
+    ///     ts_divide: None,
     /// };
     ///
     /// let packet = EnhancedPacketBlock {
