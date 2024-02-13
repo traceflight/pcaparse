@@ -12,7 +12,6 @@ Provides parsers, readers and writers for Cap(Network Associates Sniffer 2.x), P
 
 ## Why this crate
 
-* I previously made a [PR](https://github.com/courvoif/pcap-file/pull/34) to [pcap-file](https://github.com/courvoif/pcap-file) repo to handle a snaplen issue, but the author seems has no time to maintain it.
 * The sync and async processing share similar logic but divided into two crates, which will increase the difficulty of fixing problems.
 
 
