@@ -7,6 +7,7 @@ use derive_into_owned::IntoOwned;
 
 #[cfg(feature = "tokio")]
 use tokio_byteorder::AsyncReadBytesExt;
+use tracing::warn;
 
 use crate::errors::*;
 
@@ -59,7 +60,7 @@ impl<'a> CapPacket<'a> {
         let orig_len = raw.orig_len;
 
         if incl_len > orig_len {
-            return Err(PcapError::InvalidField("PacketHeader incl_len > orig_len"));
+            warn!("PacketHeader incl_len > orig_len");
         }
 
         Ok(CapPacket { timestamp: Duration::new(ts_sec as u64, ts_nsec), orig_len, data: raw.data })

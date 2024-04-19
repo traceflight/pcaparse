@@ -5,6 +5,7 @@ use std::time::Duration;
 use byteorder::ByteOrder;
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use derive_into_owned::IntoOwned;
+use tracing::warn;
 
 #[cfg(feature = "tokio")]
 use tokio::io::AsyncWrite;
@@ -78,11 +79,11 @@ impl<'a> PcapPacket<'a> {
         let orig_len = self.orig_len;
 
         if incl_len > snap_len {
-            return Err(PcapError::InvalidField("PcapPacket: incl_len > snap_len"));
+            warn!("PcapPacket: incl_len > snap_len");
         }
 
         if incl_len > orig_len {
-            return Err(PcapError::InvalidField("PcapPacket: incl_len > orig_len"));
+            warn!("PcapPacket: incl_len > orig_len");
         }
 
         let raw_packet = RawPcapPacket { ts_sec, ts_frac, incl_len, orig_len, data: Cow::Borrowed(&self.data[..]) };
@@ -115,11 +116,11 @@ impl<'a> PcapPacket<'a> {
         let orig_len = self.orig_len;
 
         if incl_len > snap_len {
-            return Err(PcapError::InvalidField("PcapPacket: incl_len > snap_len"));
+            warn!("PcapPacket: incl_len > snap_len");
         }
 
         if incl_len > orig_len {
-            return Err(PcapError::InvalidField("PcapPacket: incl_len > orig_len"));
+            warn!("PcapPacket: incl_len > orig_len");
         }
 
         let raw_packet = RawPcapPacket { ts_sec, ts_frac, incl_len, orig_len, data: Cow::Borrowed(&self.data[..]) };
@@ -144,15 +145,15 @@ impl<'a> PcapPacket<'a> {
         let orig_len = raw.orig_len;
 
         if incl_len > snap_len {
-            return Err(PcapError::InvalidField("PacketHeader incl_len > snap_len"));
+            warn!("PacketHeader incl_len > snap_len");
         }
 
         if orig_len > snap_len {
-            return Err(PcapError::InvalidField("PacketHeader orig_len > snap_len"));
+            warn!("PacketHeader orig_len > snap_len");
         }
 
         if incl_len > orig_len {
-            return Err(PcapError::InvalidField("PacketHeader incl_len > orig_len"));
+            warn!("PacketHeader incl_len > orig_len");
         }
 
         Ok(PcapPacket { timestamp: Duration::new(ts_sec as u64, ts_nsec), orig_len, data: raw.data })
