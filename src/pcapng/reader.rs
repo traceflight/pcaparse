@@ -35,6 +35,12 @@ pub struct PcapNgReader<R> {
     reader: ReadBuffer<R>,
 }
 
+impl<R> From<(PcapNgParser, ReadBuffer<R>)> for PcapNgReader<R> {
+    fn from(value: (PcapNgParser, ReadBuffer<R>)) -> Self {
+        Self { parser: value.0, reader: value.1 }
+    }
+}
+
 impl<R: Read> PcapNgReader<R> {
     /// Creates a new [`PcapNgReader`] from a reader.
     ///

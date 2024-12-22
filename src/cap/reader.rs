@@ -5,8 +5,8 @@ use tokio::io::AsyncRead;
 
 use super::{CapParser, RawCapPacket};
 use crate::cap::{CapHeader, CapPacket};
-use crate::errors::*;
 use crate::read_buffer::ReadBuffer;
+use crate::{errors::*, DataLink, Packet};
 
 /// Reads a cap from a reader.
 ///
@@ -32,6 +32,23 @@ use crate::read_buffer::ReadBuffer;
 pub struct CapReader<R> {
     parser: CapParser,
     reader: ReadBuffer<R>,
+}
+
+impl<R> From<(CapParser, ReadBuffer<R>)> for CapReader<R> {
+    fn from(value: (CapParser, ReadBuffer<R>)) -> Self {
+        Self { parser: value.0, reader: value.1 }
+    }
+}
+
+impl<'a> From<(CapPacket<'a>, DataLink)> for Packet<'a> {
+    fn from(value: (CapPacket<'a>, DataLink)) -> Self {
+        Self {
+            timestamp: Some(value.0.timestamp),
+            orig_len: value.0.orig_len as u32,
+            data: value.0.data,
+            datalink: value.1,
+        }
+    }
 }
 
 impl<R> CapReader<R> {

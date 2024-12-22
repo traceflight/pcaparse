@@ -1,8 +1,11 @@
-use std::fs::File;
 use std::io::Read;
+use std::{fs::File, path::PathBuf};
 
 use glob::glob;
-use pcaparse::pcapng::{PcapNgParser, PcapNgReader, PcapNgWriter};
+use pcaparse::{
+    pcapng::{PcapNgParser, PcapNgReader, PcapNgWriter},
+    Format, Reader,
+};
 
 #[cfg(feature = "tokio")]
 #[tokio::test]
@@ -34,6 +37,89 @@ fn reader() {
             i += 1;
         }
     }
+}
+
+#[test]
+fn unified_reader() {
+    for entry in glob("tests/pcapng/**/**/*.pcapng").expect("Failed to read glob pattern") {
+        let entry = entry.unwrap();
+
+        let file = File::open(&entry).unwrap();
+        let mut pcapng_reader = Reader::new(file).unwrap();
+
+        assert_eq!(pcapng_reader.format(), Format::PcapNg);
+
+        let mut i = 0;
+        while let Some(_) = pcapng_reader.next_packet() {
+            i += 1;
+        }
+        println!("{i}");
+    }
+}
+
+#[test]
+fn read_le_difficult() {
+    let file = File::open(PathBuf::from("tests/pcapng/little_endian/difficult/test202.pcapng")).unwrap();
+    let mut pcapng_reader = PcapNgReader::new(file).unwrap();
+
+    let mut i = 0;
+    while let Some(_block) = pcapng_reader.next_block() {
+        i += 1;
+    }
+    println!("{i}");
+}
+
+#[test]
+fn unified_reader_le_difficult() {
+    let file = File::open(PathBuf::from("tests/pcapng/little_endian/difficult/test202.pcapng")).unwrap();
+    let mut pcapng_reader = Reader::new(file).unwrap();
+
+    assert_eq!(pcapng_reader.format(), Format::PcapNg);
+
+    let mut i = 0;
+    while let Some(Ok(packet)) = pcapng_reader.next_packet() {
+        match i {
+            0 => assert_eq!(packet.orig_len, 314),
+            1 => assert_eq!(packet.orig_len, 342),
+            2 => assert_eq!(packet.orig_len, 168),
+            3 => assert_eq!(packet.orig_len, 314),
+            4 => assert_eq!(packet.orig_len, 342),
+            5 => assert_eq!(packet.orig_len, 314),
+            6 => assert_eq!(packet.orig_len, 342),
+            7 => assert_eq!(packet.orig_len, 168),
+            _ => {},
+        }
+        i += 1;
+    }
+    assert_eq!(i, 8);
+}
+
+#[cfg(feature = "tokio")]
+#[tokio::test]
+async fn async_unified_reader_le_difficult() {
+    let file = tokio::fs::File::open(PathBuf::from("tests/pcapng/little_endian/difficult/test202.pcapng"))
+        .await
+        .unwrap();
+    let mut pcapng_reader = Reader::async_new(file).await.unwrap();
+
+    assert_eq!(pcapng_reader.format(), Format::PcapNg);
+
+    let mut i = 0;
+    while let Some(Ok(packet)) = pcapng_reader.async_next_packet().await {
+        match i {
+            0 => assert_eq!(packet.orig_len, 314),
+            1 => assert_eq!(packet.orig_len, 342),
+            2 => assert_eq!(packet.orig_len, 168),
+            3 => assert_eq!(packet.orig_len, 314),
+            4 => assert_eq!(packet.orig_len, 342),
+            5 => assert_eq!(packet.orig_len, 314),
+            6 => assert_eq!(packet.orig_len, 342),
+            7 => assert_eq!(packet.orig_len, 168),
+            _ => {},
+        }
+        i += 1;
+    }
+    assert_eq!(i, 8);
 }
 
 #[cfg(feature = "tokio")]

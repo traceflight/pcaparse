@@ -1,4 +1,7 @@
-use byteorder::{BigEndian, ByteOrder, LittleEndian};
+use std::{borrow::Cow, time::Duration};
+
+use byteorder::ByteOrder;
+use derive_into_owned::IntoOwned;
 
 /// Timestamp resolution of the pcap
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -54,20 +57,30 @@ impl Endianness {
     }
 }
 
-pub(crate) trait RuntimeByteorder: ByteOrder {
-    fn endianness() -> Endianness;
+/// Commen packet.
+///
+/// The payload can be owned or borrowed.
+#[derive(Clone, Debug, IntoOwned)]
+pub struct Packet<'a> {
+    /// Timestamp EPOCH of the packet with a nanosecond resolution
+    pub timestamp: Option<Duration>,
+    /// Original length of the packet when captured on the wire
+    pub orig_len: u32,
+    /// Payload, owned or borrowed, of the packet
+    pub data: Cow<'a, [u8]>,
+    /// DataLink of current packet
+    pub datalink: DataLink,
 }
 
-impl RuntimeByteorder for BigEndian {
-    fn endianness() -> Endianness {
-        Endianness::Big
-    }
-}
-
-impl RuntimeByteorder for LittleEndian {
-    fn endianness() -> Endianness {
-        Endianness::Little
-    }
+/// format of packet file
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum Format {
+    /// pcap file
+    Pcap,
+    /// cap file
+    Cap,
+    /// pcapng file
+    PcapNg,
 }
 
 /// Data link type

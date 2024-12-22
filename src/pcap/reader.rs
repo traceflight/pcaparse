@@ -4,9 +4,9 @@ use std::io::Read;
 use tokio::io::AsyncRead;
 
 use super::{PcapParser, RawPcapPacket};
-use crate::errors::*;
 use crate::pcap::{PcapHeader, PcapPacket};
 use crate::read_buffer::ReadBuffer;
+use crate::{errors::*, DataLink, Packet};
 
 /// Reads a pcap from a reader.
 ///
@@ -34,10 +34,32 @@ pub struct PcapReader<R> {
     reader: ReadBuffer<R>,
 }
 
+impl<R> From<(PcapParser, ReadBuffer<R>)> for PcapReader<R> {
+    fn from(value: (PcapParser, ReadBuffer<R>)) -> Self {
+        Self { parser: value.0, reader: value.1 }
+    }
+}
+
+impl<'a> From<(PcapPacket<'a>, DataLink)> for Packet<'a> {
+    fn from(value: (PcapPacket<'a>, DataLink)) -> Self {
+        Self {
+            timestamp: Some(value.0.timestamp),
+            orig_len: value.0.orig_len,
+            data: value.0.data,
+            datalink: value.1,
+        }
+    }
+}
+
 impl<R> PcapReader<R> {
     /// Returns the global header of the pcap.
     pub fn header(&self) -> PcapHeader {
         self.parser.header()
+    }
+
+    /// Returns the datalink
+    pub fn datalink(&self) -> DataLink {
+        self.parser.header().datalink
     }
 }
 

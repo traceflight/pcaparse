@@ -15,6 +15,7 @@
 
 pub use common::*;
 pub use errors::*;
+pub use unified::*;
 
 pub(crate) mod common;
 pub(crate) mod errors;
@@ -23,6 +24,7 @@ pub(crate) mod read_buffer;
 pub mod cap;
 pub mod pcap;
 pub mod pcapng;
+pub mod unified;
 
 #[cfg(feature = "tokio")]
 #[allow(dead_code)]

@@ -38,6 +38,11 @@ impl<R> ReadBuffer<R> {
         self.pos += nb_bytes;
     }
 
+    /// Reset pos
+    pub(crate) fn reset_pos(&mut self) {
+        self.pos = 0;
+    }
+
     /// Advance the internal buffer position.
     fn advance_with_slice(&mut self, rem: &[u8]) {
         // Compute the length between the buffer and the slice

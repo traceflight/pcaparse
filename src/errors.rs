@@ -18,6 +18,10 @@ pub enum PcapError {
     #[error("Invalid field value: {0}")]
     InvalidField(&'static str),
 
+    /// Unsupported format
+    #[error("Unsupported format")]
+    UnsupportedFormat,
+
     /// UTF8 conversion error
     #[error("UTF8 error")]
     Utf8Error(#[source] std::str::Utf8Error),

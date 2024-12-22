@@ -15,12 +15,6 @@ Provides parsers, readers and writers for Cap(Network Associates Sniffer 2.x), P
 * The sync and async processing share similar logic but divided into two crates, which will increase the difficulty of fixing problems.
 
 
-## To do
-
-- [x] Fix timestamp of pcapng
-- [x] Add parser and reader for cap(Network Associates Sniffer 2.x) file
-- [ ] Add writer for cap(Network Associates Sniffer 2.x) file
-
 ## Crate Features
 
 `tokio` enables async reading and writing via `tokio` crate.
@@ -31,10 +25,27 @@ Add it to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-pcaparse = "0.1"
+pcaparse = "0.2"
 ```
 
 ## Examples
+
+### Unified reader for cap/pcap/pcapng
+```rust,no_run
+use std::fs::File;
+use pcaparse::Reader;
+
+let file_in = File::open("test.pcap").expect("Error opening file");
+let mut reader = Reader::new(file_in).unwrap();
+
+// Read test.pcap
+while let Some(pkt) = reader.next_packet() {
+    //Check if there is no error
+    let pkt = pkt.unwrap();
+
+    //Do something
+ }
+```
 
 ### PcapReader
 ```rust,no_run
