@@ -1,4 +1,4 @@
-use pcaparse::{cap::CapReader, DataLink, Format, Reader};
+use pcaparse::{DataLink, Format, Reader, cap::CapReader};
 
 static DATA: &[u8; 1466] = include_bytes!("dns-only.cap");
 
@@ -49,7 +49,7 @@ async fn async_read_tokio_file_unified_reader() {
     let reader = tokio::fs::File::open("tests/cap/dns-only.cap").await.unwrap();
     let mut cap_reader = Reader::async_new(reader).await.unwrap();
     let datalink = cap_reader.datalink();
-    assert_eq!(datalink, DataLink::ETHERNET);
+    assert_eq!(datalink, Some(DataLink::ETHERNET));
     assert_eq!(cap_reader.format(), Format::Cap);
 
     //Global header len
@@ -89,7 +89,7 @@ fn read_cap_unified_reader() {
     let mut reader = Reader::new(&DATA[..]).unwrap();
     let datalink = reader.datalink();
     assert_eq!(Format::Cap, reader.format());
-    assert_eq!(datalink, DataLink::ETHERNET);
+    assert_eq!(datalink, Some(DataLink::ETHERNET));
 
     //Global header len
     let mut data_len = 128;

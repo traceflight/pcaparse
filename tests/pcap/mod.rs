@@ -53,7 +53,7 @@ async fn async_read_tokio_file_unified_reader() {
     let reader = tokio::fs::File::open("tests/pcap/little_endian.pcap").await.unwrap();
     let mut pcap_reader = Reader::async_new(reader).await.unwrap();
     let datalink = pcap_reader.datalink();
-    assert_eq!(datalink, DataLink::ETHERNET);
+    assert_eq!(datalink, Some(DataLink::ETHERNET));
     assert_eq!(pcap_reader.format(), Format::Pcap);
 
     //Global header len
@@ -92,7 +92,7 @@ fn read() {
 fn read_by_unified_reader() {
     let mut reader = Reader::new(&DATA[..]).unwrap();
     let datalink = reader.datalink();
-    assert_eq!(datalink, DataLink::ETHERNET);
+    assert_eq!(datalink, Some(DataLink::ETHERNET));
     assert_eq!(reader.format(), Format::Pcap);
 
     //Global header len

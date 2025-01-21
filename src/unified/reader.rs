@@ -4,11 +4,11 @@ use std::{borrow::Cow, io::Read};
 use tokio::io::AsyncRead;
 
 use crate::{
+    DataLink, Format, Packet, PcapError,
     cap::{CapHeader, CapParser, CapReader},
     pcap::{PcapHeader, PcapParser, PcapReader},
     pcapng::{Block, PcapNgParser, PcapNgReader},
     read_buffer::ReadBuffer,
-    DataLink, Format, Packet, PcapError,
 };
 
 /// Packet file reader
@@ -16,13 +16,18 @@ pub struct Reader<R> {
     /// Inner reader
     inner: InnerReader<R>,
     /// current datalink
-    datalink: DataLink,
+    datalink: Option<DataLink>,
 }
 
 impl<R> Reader<R> {
     /// Get datalink
-    pub fn datalink(&self) -> DataLink {
+    pub fn datalink(&self) -> Option<DataLink> {
         self.datalink
+    }
+
+    /// Get datalink
+    pub fn datalink_or(&self, default: DataLink) -> DataLink {
+        self.datalink.unwrap_or(default)
     }
 
     /// Get file format
@@ -40,29 +45,29 @@ impl<R: Read> Reader<R> {
     /// Try construct Reader by reader
     pub fn new(reader: R) -> Result<Self, PcapError> {
         let inner: InnerReader<R> = InnerReader::new(reader)?;
-        let datalink = inner.datalink().unwrap_or(DataLink::ETHERNET);
+        let datalink = inner.datalink();
         Ok(Self { inner, datalink })
     }
 
     /// Construct Reader by reader and file format
     pub fn new_with_format(reader: R, format: Format) -> Result<Self, PcapError> {
         let inner = InnerReader::new_with_format(reader, format)?;
-        let datalink = inner.datalink().unwrap_or(DataLink::ETHERNET);
+        let datalink = inner.datalink();
         Ok(Self { inner, datalink })
     }
 
     /// Get next packet
     pub fn next_packet<'a>(&'a mut self) -> Option<Result<Packet<'a>, PcapError>> {
         match &mut self.inner {
-            InnerReader::Pcap(reader) => reader.next_packet().map(|result| result.map(|packet| (packet, self.datalink).into())),
-            InnerReader::Cap(reader) => reader.next_packet().map(|result| result.map(|packet| (packet, self.datalink).into())),
+            InnerReader::Pcap(reader) => reader.next_packet().map(|result| result.map(|packet| (packet, self.datalink.unwrap()).into())),
+            InnerReader::Cap(reader) => reader.next_packet().map(|result| result.map(|packet| (packet, self.datalink.unwrap()).into())),
             InnerReader::PcapNg(reader) => loop {
                 match reader.next_block() {
                     None => return None,
                     Some(block) => match block {
                         Err(e) => return Some(Err(e)),
                         Ok(Block::InterfaceDescription(block)) => {
-                            self.datalink = block.linktype;
+                            self.datalink = Some(block.linktype);
                         },
                         Ok(Block::EnhancedPacket(block)) => {
                             // lifetime adjust
@@ -77,7 +82,12 @@ impl<R: Read> Reader<R> {
                         },
                         Ok(Block::SimplePacket(block)) => {
                             let data: Cow<'a, [u8]> = unsafe { std::mem::transmute(block.data) };
-                            let packet = Packet { orig_len: block.original_len, data, datalink: self.datalink, timestamp: None };
+                            let packet = Packet {
+                                orig_len: block.original_len,
+                                data,
+                                datalink: self.datalink.unwrap_or(DataLink::ETHERNET),
+                                timestamp: None,
+                            };
                             return Some(Ok(packet));
                         },
                         Ok(_) => {},
@@ -93,29 +103,35 @@ impl<R: AsyncRead + Unpin> Reader<R> {
     /// Try construct Reader by reader
     pub async fn async_new(reader: R) -> Result<Self, PcapError> {
         let inner: InnerReader<R> = InnerReader::async_new(reader).await?;
-        let datalink = inner.datalink().unwrap_or(DataLink::ETHERNET);
+        let datalink = inner.datalink();
         Ok(Self { inner, datalink })
     }
 
     /// Construct Reader by reader and file format
     pub async fn async_new_with_format(reader: R, format: Format) -> Result<Self, PcapError> {
         let inner = InnerReader::async_new_with_format(reader, format).await?;
-        let datalink = inner.datalink().unwrap_or(DataLink::ETHERNET);
+        let datalink = inner.datalink();
         Ok(Self { inner, datalink })
     }
 
     /// Get next packet
     pub async fn async_next_packet<'a>(&'a mut self) -> Option<Result<Packet<'a>, PcapError>> {
         match &mut self.inner {
-            InnerReader::Pcap(reader) => reader.async_next_packet().await.map(|result| result.map(|packet| (packet, self.datalink).into())),
-            InnerReader::Cap(reader) => reader.async_next_packet().await.map(|result| result.map(|packet| (packet, self.datalink).into())),
+            InnerReader::Pcap(reader) => reader
+                .async_next_packet()
+                .await
+                .map(|result| result.map(|packet| (packet, self.datalink.unwrap()).into())),
+            InnerReader::Cap(reader) => reader
+                .async_next_packet()
+                .await
+                .map(|result| result.map(|packet| (packet, self.datalink.unwrap()).into())),
             InnerReader::PcapNg(reader) => loop {
                 match reader.async_next_block().await {
                     None => return None,
                     Some(block) => match block {
                         Err(e) => return Some(Err(e)),
                         Ok(Block::InterfaceDescription(block)) => {
-                            self.datalink = block.linktype;
+                            self.datalink = Some(block.linktype);
                         },
                         Ok(Block::EnhancedPacket(block)) => {
                             // lifetime adjust
@@ -130,7 +146,12 @@ impl<R: AsyncRead + Unpin> Reader<R> {
                         },
                         Ok(Block::SimplePacket(block)) => {
                             let data: Cow<'a, [u8]> = unsafe { std::mem::transmute(block.data) };
-                            let packet = Packet { orig_len: block.original_len, data, datalink: self.datalink, timestamp: None };
+                            let packet = Packet {
+                                orig_len: block.original_len,
+                                data,
+                                datalink: self.datalink.unwrap_or(DataLink::ETHERNET),
+                                timestamp: None,
+                            };
                             return Some(Ok(packet));
                         },
                         Ok(_) => {},
