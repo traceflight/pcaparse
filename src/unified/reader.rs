@@ -252,6 +252,7 @@ impl<R: AsyncRead + Unpin> InnerReader<R> {
                 let reader: PcapReader<R> = (parser, reader).into();
                 return Ok(Self::Pcap(reader));
             },
+            Err(PcapError::IoError(e)) => return Err(PcapError::IoError(e)),
             Err(PcapError::IncompleteBuffer) => return Err(PcapError::IncompleteBuffer),
             _ => {},
         }
@@ -262,6 +263,7 @@ impl<R: AsyncRead + Unpin> InnerReader<R> {
                 let reader: PcapNgReader<R> = (parser, reader).into();
                 return Ok(Self::PcapNg(reader));
             },
+            Err(PcapError::IoError(e)) => return Err(PcapError::IoError(e)),
             Err(PcapError::IncompleteBuffer) => return Err(PcapError::IncompleteBuffer),
             _ => {},
         }
@@ -272,6 +274,7 @@ impl<R: AsyncRead + Unpin> InnerReader<R> {
                 let reader: CapReader<R> = (parser, reader).into();
                 return Ok(Self::Cap(reader));
             },
+            Err(PcapError::IoError(e)) => return Err(PcapError::IoError(e)),
             Err(PcapError::IncompleteBuffer) => return Err(PcapError::IncompleteBuffer),
             _ => {},
         }
