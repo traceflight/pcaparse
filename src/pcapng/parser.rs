@@ -7,8 +7,8 @@ use super::blocks::enhanced_packet::EnhancedPacketBlock;
 use super::blocks::interface_description::InterfaceDescriptionBlock;
 use super::blocks::section_header::SectionHeaderBlock;
 use super::blocks::{INTERFACE_DESCRIPTION_BLOCK, SECTION_HEADER_BLOCK};
-use crate::errors::PcapError;
 use crate::Endianness;
+use crate::errors::PcapError;
 
 const TS_SECOND_2_MICRO: u64 = 1000000;
 
@@ -206,7 +206,7 @@ impl PcapNgParser {
     }
 
     /// Returns the [`InterfaceDescriptionBlock`] corresponding to the given packet.
-    pub fn packet_interface(&self, packet: &EnhancedPacketBlock) -> Option<&InterfaceDescriptionBlock> {
+    pub fn packet_interface(&self, packet: &EnhancedPacketBlock) -> Option<&InterfaceDescriptionBlock<'_>> {
         self.interfaces.get(packet.interface_id as usize)
     }
 

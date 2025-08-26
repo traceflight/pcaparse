@@ -6,7 +6,7 @@ use tokio::io::AsyncRead;
 use super::{PcapParser, RawPcapPacket};
 use crate::pcap::{PcapHeader, PcapPacket};
 use crate::read_buffer::ReadBuffer;
-use crate::{errors::*, DataLink, Packet};
+use crate::{DataLink, Packet, errors::*};
 
 /// Reads a pcap from a reader.
 ///
@@ -87,7 +87,7 @@ impl<R: Read> PcapReader<R> {
     }
 
     /// Returns the next [`PcapPacket`].
-    pub fn next_packet(&mut self) -> Option<Result<PcapPacket, PcapError>> {
+    pub fn next_packet(&mut self) -> Option<Result<PcapPacket<'_>, PcapError>> {
         match self.reader.has_data_left() {
             Ok(has_data) => {
                 if has_data {
@@ -101,7 +101,7 @@ impl<R: Read> PcapReader<R> {
     }
 
     /// Returns the next [`RawPcapPacket`].
-    pub fn next_raw_packet(&mut self) -> Option<Result<RawPcapPacket, PcapError>> {
+    pub fn next_raw_packet(&mut self) -> Option<Result<RawPcapPacket<'_>, PcapError>> {
         match self.reader.has_data_left() {
             Ok(has_data) => {
                 if has_data {
@@ -152,7 +152,7 @@ impl<R: AsyncRead + Unpin> PcapReader<R> {
     }
 
     /// Returns the next [`PcapPacket`].
-    pub async fn async_next_packet(&mut self) -> Option<Result<PcapPacket, PcapError>> {
+    pub async fn async_next_packet(&mut self) -> Option<Result<PcapPacket<'_>, PcapError>> {
         match self.reader.async_has_data_left().await {
             Ok(has_data) => {
                 if has_data {
@@ -166,7 +166,7 @@ impl<R: AsyncRead + Unpin> PcapReader<R> {
     }
 
     /// Returns the next [`RawPcapPacket`].
-    pub async fn async_next_raw_packet(&mut self) -> Option<Result<RawPcapPacket, PcapError>> {
+    pub async fn async_next_raw_packet(&mut self) -> Option<Result<RawPcapPacket<'_>, PcapError>> {
         match self.reader.async_has_data_left().await {
             Ok(has_data) => {
                 if has_data {
