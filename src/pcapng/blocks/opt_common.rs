@@ -59,7 +59,8 @@ pub(crate) trait PcapNgOption<'a> {
             options.push(opt);
         }
 
-        Err(PcapError::InvalidField("Invalid option"))
+        // Err(PcapError::InvalidField("Invalid option"))
+        Ok((slice, options))
     }
 
     /// Write the option to a writer
@@ -133,7 +134,8 @@ pub(crate) trait AsyncPcapNgOption<'a> {
             options.push(opt);
         }
 
-        Err(PcapError::InvalidField("Invalid option"))
+        // Err(PcapError::InvalidField("Invalid option"))
+        Ok((slice, options))
     }
 
     /// Write the option to a writer
